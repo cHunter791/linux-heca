@@ -740,6 +740,11 @@ int push_back_if_remote_dsm_page(struct page *page)
     return _push_back_if_remote_dsm_page(page);
 }
 
+static inline int ioctl_initiate_fault(struct mm_struct *mm, unsigned long addr)
+{
+    return 1 == get_user_pages(current, mm, addr, 1, 1, 0, NULL, NULL);
+}
+
 /* no locks are held when calling this function */
 int dsm_flag_page_remote(struct mm_struct *mm, struct dsm *dsm, u32 descriptor,
         unsigned long request_addr)
@@ -770,7 +775,7 @@ retry:
 
     pgd = pgd_offset(mm, addr);
     if (unlikely(!pgd_present(*pgd))) {
-        if (!dsm_initiate_fault(mm, addr, 1)) {
+        if (!ioctl_initiate_fault(mm, addr)) {
             printk("[dsm_flag_page_remote] no pgd\n");
             r = -EFAULT;
             goto out;
@@ -780,7 +785,7 @@ retry:
 
     pud = pud_offset(pgd, addr);
     if (unlikely(!pud_present(*pud))) {
-        if (!dsm_initiate_fault(mm, addr, 1)) {
+        if (!ioctl_initiate_fault(mm, addr)) {
             printk("[dsm_flag_page_remote] no pud\n");
             r = -EFAULT;
             goto out;
@@ -831,7 +836,7 @@ retry:
                 }
             } else {
                 pte_unmap_unlock(pte, ptl);
-                if (!dsm_initiate_fault(mm, addr, 1)) {
+                if (!ioctl_initiate_fault(mm, addr)) {
                     printk("[*] failed at faulting \n");
                     r = -EFAULT;
                     goto out;
@@ -859,7 +864,7 @@ retry:
     if (PageKsm(page)) {
         printk("[dsm_flag_page_remote] KSM page\n");
         pte_unmap_unlock(pte, ptl);
-        if (!dsm_initiate_fault(mm, addr, 1)) {
+        if (!ioctl_initiate_fault(mm, addr)) {
             printk("[dsm_extract_page] ksm_madvise ret : %d\n", r);
             // DSM1 : better ksm error handling required.
             r = -EFAULT;
@@ -892,4 +897,3 @@ out:
     up_read(&mm->mmap_sem);
     return r;
 }
-
