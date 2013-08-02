@@ -1,0 +1,21 @@
+config HECA
+	tristate "HECA"
+	depends on NUMA && RDS && INFINIBAND && INFINIBAND_ADDR_TRANS && INET && MMU_NOTIFIER && MMU
+	default m
+	help
+	  Enable HECA - running single VM over several linux hosts with qemu/kvm.
+
+config HECA_DEBUG
+	bool "HECA_DEBUG"
+	depends on HECA
+	default n
+	help
+		HECA_DEBUG provides debug functionality for HECA 
+		
+config HECA_VERBOSE_PRINTK
+	bool "HECA_VERBOSE_PRINTK"
+	depends on HECA
+	default n
+	help
+		HECA_VERBOSE_PRINTK provide verbose functionality 	
+
