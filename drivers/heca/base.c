@@ -858,7 +858,8 @@ static void destroy_hproc_mrs(struct heca_process *hproc)
         } while(1);
 }
 
-static struct heca_process *find_local_hproc_from_list(struct heca_space *hspace)
+static struct heca_process *find_local_hproc_from_list(
+                struct heca_space *hspace)
 {
         struct heca_process *tmp_hproc;
 
@@ -920,7 +921,8 @@ int create_heca_mr(struct hecaioc_hmr *udata)
                 ret = -EFAULT;
                 goto out_free;
         }
-        mr->descriptor = heca_get_descriptor(hspace->hspace_id, udata->hproc_ids);
+        mr->descriptor = heca_get_descriptor(hspace->hspace_id,
+                        udata->hproc_ids);
         if (!mr->descriptor) {
                 heca_printk(KERN_ERR "can't find MR descriptor for hproc_ids");
                 ret = -EFAULT;
