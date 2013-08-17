@@ -567,7 +567,8 @@ static void release_hproc_tx_elements(struct heca_process *hproc,
                 int types = MSG_REQ_PAGE | MSG_REQ_PAGE_TRY |
                         MSG_RES_PAGE_FAIL | MSG_REQ_READ;
 
-                if (msg->type & types && msg->hspace_id == hproc->hspace->hspace_id
+                if (msg->type & types
+                                && msg->hspace_id == hproc->hspace->hspace_id
                                 && (msg->src_id == hproc->hproc_id
                                         || msg->dest_id == hproc->hproc_id)
                                 && atomic_cmpxchg(&tx_e->used, 1, 2) == 1) {
@@ -675,15 +676,15 @@ void remove_hproc(u32 hspace_id, u32 hproc_id)
                         root = &heca_state->hcm->connections_rb_tree_root;
                         for (node = rb_first(root);
                                         node; node = rb_next(node)) {
-                                struct heca_connection *ele;
+                                struct heca_connection *conn;
 
-                                ele = rb_entry(node,
+                                conn = rb_entry(node,
                                                 struct heca_connection,
                                                 rb_node);
-                                BUG_ON(!ele);
+                                BUG_ON(!conn);
                                 release_hproc_queued_requests(hproc,
-                                                &ele->tx_buffer);
-                                release_hproc_tx_elements(hproc, ele);
+                                                &conn->tx_buffer);
+                                release_hproc_tx_elements(hproc, conn);
                         }
                 }
                 release_hproc_push_elements(hproc);
@@ -858,8 +859,7 @@ static void destroy_hproc_mrs(struct heca_process *hproc)
         } while(1);
 }
 
-static struct heca_process *find_local_hproc_from_list(
-                struct heca_space *hspace)
+static struct heca_process *find_local_hproc_from_list(struct heca_space *hspace)
 {
         struct heca_process *tmp_hproc;
 
@@ -921,8 +921,7 @@ int create_heca_mr(struct hecaioc_hmr *udata)
                 ret = -EFAULT;
                 goto out_free;
         }
-        mr->descriptor = heca_get_descriptor(hspace->hspace_id,
-                        udata->hproc_ids);
+        mr->descriptor = heca_get_descriptor(hspace->hspace_id, udata->hproc_ids);
         if (!mr->descriptor) {
                 heca_printk(KERN_ERR "can't find MR descriptor for hproc_ids");
                 ret = -EFAULT;

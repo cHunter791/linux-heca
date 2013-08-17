@@ -1,3 +1,7 @@
+/*
+ * Benoit Hudzia <benoit.hudzia@gmail.com> 2011 (c)
+ */
+
 #ifndef _HECA_IOCTL_H
 #define _HECA_IOCTL_H
 
