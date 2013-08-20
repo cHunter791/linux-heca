@@ -1363,7 +1363,7 @@ retry:
         page_cache_get(page);
 
         hpc = heca_cache_get_hold(hproc, addr);
-        if (unlikely(hpc)) {
+        if (hpc) {
                 /* these should be handled in the first do_heca_page_fault */
                 BUG_ON(hpc->tag == PULL_TRY_TAG);
 
