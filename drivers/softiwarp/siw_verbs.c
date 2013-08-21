@@ -465,6 +465,14 @@ struct ib_qp *siw_create_qp(struct ib_pd *ofa_pd,
 		}
 		qp->attrs.flags |= SIW_KERNEL_VERBS;
 	}
+	if (attrs->sq_sig_type != IB_SIGNAL_REQ_WR) {
+		if (attrs->sq_sig_type == IB_SIGNAL_ALL_WR)
+			qp->attrs.flags |= SIW_SIGNAL_ALL_WR;
+		else {
+			rv = -EINVAL;
+			goto err_out;
+		}
+	}
 	qp->pd  = pd;
 	qp->scq = scq;
 	qp->rcq = rcq;
@@ -849,8 +857,11 @@ int siw_post_send(struct ib_qp *ofa_qp, struct ib_send_wr *wr,
 			break;
 		}
 		wr_type(wqe) = opcode_ofa2siw(wr->opcode);
-		wr_flags(wqe) = wr->send_flags;
 		wr_id(wqe) = wr->wr_id;
+
+		wr_flags(wqe) = wr->send_flags;
+		if (qp->attrs.flags & SIW_SIGNAL_ALL_WR)
+			wr_flags(wqe) |= IB_SEND_SIGNALED;
 
 		if (wr->num_sge > qp->attrs.sq_max_sges) {
 			/*
