@@ -512,7 +512,8 @@ static int heca_extract_page(struct heca_process *local_hproc,
                 struct heca_process *remote_hproc,
                 struct mm_struct *mm, unsigned long addr,
                 pte_t *return_pte, u32 *hproc_id, int deferred,
-                struct page **page, struct heca_memory_region *mr, int read_copy)
+                struct page **page, struct heca_memory_region *mr,
+                int read_copy)
 {
         spinlock_t *ptl;
         int r, res = HECA_EXTRACT_FAIL;
@@ -549,8 +550,8 @@ retry:
 
         if (unlikely(!pte_present(pte_entry))) {
                 /* try and redirect, according to a heca pte */
-                if (!heca_extract_read_hspace_pte(local_hproc, mm, addr, pte_entry,
-                                        &pd, hproc_id)) {
+                if (!heca_extract_read_hspace_pte(local_hproc, mm, addr,
+                                        pte_entry, &pd, hproc_id)) {
                         res = HECA_EXTRACT_REDIRECT;
 
                         /* it's time to fault the page in... */
@@ -604,7 +605,8 @@ retry:
                 ptep_clear_flush(pd.vma, addr, pd.pte);
                 if (read_copy) {
                         pte_entry = pte_mkclean(pte_wrprotect(pte_entry));
-                        heca_add_reader(local_hproc, addr, remote_hproc->hproc_id);
+                        heca_add_reader(local_hproc, addr,
+                                        remote_hproc->hproc_id);
                 } else {
                         pte_entry = heca_descriptor_to_pte(remote_hproc->descriptor,
                         		HECA_INFLIGHT);
@@ -806,8 +808,8 @@ out:
 }
 
 int heca_prepare_page_for_push(struct heca_process *local_hproc,
-                struct heca_process_list hprocs, struct page *page, unsigned long addr,
-                struct mm_struct *mm, u32 descriptor)
+                struct heca_process_list hprocs, struct page *page,
+                unsigned long addr, struct mm_struct *mm, u32 descriptor)
 {
         struct heca_pte_data pd;
         struct heca_page_cache *hpc = NULL;
@@ -1049,8 +1051,8 @@ int push_back_if_remote_heca_page(struct page *page)
                                 page, vma, mr);
                 if (discarded < 0) {
                         if (discarded == -EEXIST) {
-                                heca_request_page_pull(hproc->hspace, hproc, page,
-                                                address, vma->vm_mm, mr);
+                                heca_request_page_pull(hproc->hspace, hproc,
+                                                page, address, vma->vm_mm, mr);
                         }
                         if (unlikely(PageSwapCache(page)))
                                 try_to_free_swap(page);
@@ -1068,8 +1070,8 @@ out:
 }
 
 /* no locks are held when calling this function */
-int hproc_flag_page_remote(struct mm_struct *mm, struct heca_space *hspace, u32 descriptor,
-                unsigned long request_addr)
+int hproc_flag_page_remote(struct mm_struct *mm, struct heca_space *hspace,
+                u32 descriptor, unsigned long request_addr)
 {
         spinlock_t *ptl;
         pte_t *pte;
@@ -1132,7 +1134,8 @@ retry:
                         if (likely(pmd_trans_huge(*pmd))) {
                                 if (unlikely(pmd_trans_splitting(*pmd))) {
                                         spin_unlock(&mm->page_table_lock);
-                                        wait_split_huge_page(vma->anon_vma, pmd);
+                                        wait_split_huge_page(vma->anon_vma,
+                                                        pmd);
                                 } else {
                                         spin_unlock(&mm->page_table_lock);
                                         split_huge_page_pmd(vma, addr, pmd);
@@ -1197,7 +1200,7 @@ retry:
                         heca_printk(KERN_ERR "ksm_madvise ret : %d", r);
                         // HECA1 : better ksm error handling required.
                         r = -EFAULT;
-                        goto out;
+                       goto out;
                 }
                 goto retry;
         }
