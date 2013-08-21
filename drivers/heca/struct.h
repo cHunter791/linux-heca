@@ -116,6 +116,9 @@ struct heca_space {
 
         struct kobject hspace_kobject;
         int nb_local_hprocs;
+        
+        struct kobject kobj;
+
 };
 
 struct heca_space_kobjects {
@@ -408,6 +411,10 @@ struct heca_module_state {
         struct heca_space_kobjects hspaces_kobjects;
         struct workqueue_struct * heca_rx_wq;
         struct workqueue_struct * heca_tx_wq;
+
+        struct kset *root_kset;
+        struct kset *transports_kset;
+        struct kset *hspaces_kset;
 };
 
 struct heca_process_list {
