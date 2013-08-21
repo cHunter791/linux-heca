@@ -396,7 +396,7 @@ int heca_cache_add(struct heca_process *hproc, unsigned long addr, int nproc,
                         break;
 
                 spin_lock_irq(&hproc->page_cache_spinlock);
-                r = radix_tree_insert(&hproc->page_cache, addr, hpc);
+                r = radix_tree_insert(&hproc->page_cache, addr, *hpc);
                 spin_unlock_irq(&hproc->page_cache_spinlock);
                 radix_tree_preload_end();
 
