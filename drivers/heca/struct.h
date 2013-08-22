@@ -114,18 +114,12 @@ struct heca_space {
 
         struct list_head hspace_ptr;
 
-        struct kobject hspace_kobject;
         int nb_local_hprocs;
-        
+
         struct kobject kobj;
 
 };
 
-struct heca_space_kobjects {
-        struct kobject *hspace_glob_kobject;
-        struct kobject *rdma_kobject;
-        struct kobject *domains_kobject;
-};
 
 struct heca_connections_manager {
         int node_ip;
@@ -267,7 +261,6 @@ struct heca_memory_region {
         u32 hmr_id;
         u32 flags;
         struct rb_node rb_node;
-        struct kobject hmr_kobject;
 };
 
 struct heca_process {
@@ -408,11 +401,10 @@ struct heca_module_state {
         struct radix_tree_root mm_tree_root;
         struct list_head hspaces_list;
 
-        struct heca_space_kobjects hspaces_kobjects;
         struct workqueue_struct * heca_rx_wq;
         struct workqueue_struct * heca_tx_wq;
 
-        struct kset *root_kset;
+        struct kobject root_kobj;
         struct kset *transports_kset;
         struct kset *hspaces_kset;
 };

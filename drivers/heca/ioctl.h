@@ -5,6 +5,12 @@
 #ifndef _HECA_IOCTL_H
 #define _HECA_IOCTL_H
 
+
+#define HECA_MODULE_VERSION     "0.2.0"
+#define HECA_MODULE_AUTHOR      "Benoit Hudzia"
+#define HECA_MODULE_DESCRIPTION "Hecatonchire Module"
+#define HECA_MODULE_LICENSE     "GPL"
+
 /* print */
 void __heca_printk(const char *, int, const char *, const char *, ...);
 #define heca_printk(fmt, ...) \

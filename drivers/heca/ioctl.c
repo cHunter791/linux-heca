@@ -10,12 +10,12 @@
 #include <linux/kern_levels.h>
 
 #include "ioctl.h"
-#include "sysfs.h"
 #include "base.h"
 #include "push.h"
 #include "pull.h"
 #include "ops.h"
 #include "task.h"
+#include "kobject.h"
 
 /*
  * create the actual trace functions needed for heca.ko
@@ -315,10 +315,9 @@ static int heca_init(void)
         int rc;
 
         heca_printk(KERN_DEBUG "<enter>");
-
+        setup_heca_module_state_ksets(heca_state);
         BUG_ON(!heca_state);
         heca_zero_pfn_init();
-        heca_sysfs_setup(heca_state);
         rc = misc_register(&heca_misc);
         init_hcm();
         BUG_ON(heca_hook_register(&my_heca_hook));
@@ -336,15 +335,15 @@ static void heca_exit(void)
         BUG_ON(heca_hook_unregister());
         fini_hcm();
         misc_deregister(&heca_misc);
-        heca_sysfs_cleanup(heca_state);
+        cleanup_heca_module_state_ksets(heca_state);
         heca_zero_pfn_exit();
         destroy_heca_module_state();
         heca_printk(KERN_DEBUG "<exit>");
 }
 module_exit(heca_exit);
 
-MODULE_VERSION("0.2.0");
-MODULE_AUTHOR("Benoit Hudzia");
-MODULE_DESCRIPTION("Hecatonchire Module");
-MODULE_LICENSE("GPL");
+MODULE_VERSION(HECA_MODULE_VERSION);
+MODULE_AUTHOR(HECA_MODULE_AUTHOR);
+MODULE_DESCRIPTION(HECA_MODULE_DESCRIPTION);
+MODULE_LICENSE(HECA_MODULE_LICENSE);
 

@@ -12,7 +12,6 @@
 #include "conn.h"
 #include "pull.h"
 #include "push.h"
-#include "sysfs.h"
 #include "ops.h"
 #include "task.h"
 
@@ -129,8 +128,6 @@ void remove_hspace(struct heca_space *hspace)
         mutex_unlock(&heca_state->heca_state_mutex);
         synchronize_rcu();
 
-        delete_hspace_sysfs_entry(&hspace->hspace_kobject);
-
         mutex_lock(&heca_state->heca_state_mutex);
         kfree(hspace);
         mutex_unlock(&heca_state->heca_state_mutex);
@@ -193,20 +190,11 @@ int create_hspace(__u32 hspace_id)
                 goto failed;
         }
 
-        r = create_hspace_sysfs_entry(new_hspace, heca_state);
-        if (r) {
-                heca_printk("create_hspace_sysfs_entry: failed %d", r);
-                goto err_delete;
-        }
-
         list_add(&new_hspace->hspace_ptr, &heca_state->hspaces_list);
         heca_printk("registered hspace %p, hspace_id : %u, res: %d",
                         new_hspace, hspace_id, r);
         return r;
 
-err_delete:
-        radix_tree_delete(&heca_state->hspaces_tree_root,
-                        (unsigned long) hspace_id);
 failed:
         kfree(new_hspace);
         return r;
@@ -427,12 +415,6 @@ int create_hproc(struct hecaioc_hproc *hproc_info)
                 seqlock_init(&new_hproc->push_cache_lock);
         }
 
-        r = create_hproc_sysfs_entry(new_hproc);
-        if (r) {
-                heca_printk(KERN_ERR "failed create_hproc_sysfs_entry %d", r);
-                goto out;
-        }
-
         /* register hproc by id and mm_struct (must come before hspace_get_descriptor) */
         if (insert_hproc_to_radix_trees(heca_state, hspace, new_hproc))
                 goto out;
@@ -479,7 +461,6 @@ inline void release_hproc(struct heca_process *hproc)
         atomic_dec(&hproc->refs);
         if (atomic_cmpxchg(&hproc->refs, 1, 0) == 1) {
                 trace_heca_free_hproc(hproc->hproc_id);
-                delete_hproc_sysfs_entry(&hproc->hproc_kobject);
                 synchronize_rcu();
                 kfree(hproc);
         }
@@ -960,7 +941,6 @@ int create_heca_mr(struct hecaioc_hmr *udata)
                                 mr->addr, mr->sz);
         }
 
-        create_mr_sysfs_entry(local_hproc, mr);
         goto out;
 
 out_remove_tree:

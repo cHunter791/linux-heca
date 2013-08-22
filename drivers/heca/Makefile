@@ -1,6 +1,6 @@
 ccflags-y += -I${PWD}
 
-heca-y := ioctl.o base.o conn.o ops.o pull.o push.o struct.o sysfs.o task.o kobject.o
+heca-y := ioctl.o base.o conn.o ops.o pull.o push.o struct.o task.o kobject.o
 
 obj-$(CONFIG_HECA) += heca.o
 

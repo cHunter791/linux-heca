@@ -11,7 +11,6 @@
 #include "base.h"
 #include "struct.h"
 #include "ops.h"
-#include "sysfs.h"
 
 #define ntohll(x) be64_to_cpu(x)
 #define htonll(x) cpu_to_be64(x)
@@ -1486,12 +1485,6 @@ int server_event_handler(struct rdma_cm_id *id, struct rdma_cm_event *ev)
                         goto err;
                 }
 
-                ret = create_connection_sysfs_entry(conn);
-                if (ret) {
-                        heca_printk(KERN_ERR "create_conn_sysfs_entry failed: %d",
-                                        ret);
-                        goto err;
-                }
 
                 atomic_set(&conn->alive, 1);
                 break;
@@ -1632,10 +1625,6 @@ static int create_connection(struct heca_connections_manager *hcm,
         if (IS_ERR(conn->cm_id))
                 goto err1;
 
-        if (create_connection_sysfs_entry(conn)) {
-                heca_printk(KERN_ERR "create_conn_sysfs_entry failed");
-                goto err1;
-        }
 
         return rdma_resolve_addr(conn->cm_id, (struct sockaddr *) &conn->local,
                         (struct sockaddr*) &conn->remote, 2000);
@@ -1801,7 +1790,6 @@ int destroy_connection(struct heca_connection *conn)
         heca_destroy_page_pool(conn);
 
         erase_rb_conn(conn);
-        delete_connection_sysfs_entry(conn);
         vfree(conn);
 
         return ret;
