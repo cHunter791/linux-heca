@@ -25,8 +25,12 @@
 static unsigned long congestion = 0;
 inline int heca_is_congested(void)
 {
-        trace_heca_is_congested(congestion);
-        return congestion > HECA_CONGESTION_THRESHOLD;
+        if (HECA_CONGESTION_THRESHOLD) {
+                trace_heca_is_congested(congestion);
+                return congestion > HECA_CONGESTION_THRESHOLD;
+        } else {
+                return 0;
+        }
 }
 
 static inline void heca_push_finish_notify(struct page *page)
@@ -456,6 +460,18 @@ out_mm:
         return -EFAULT;
 }
 
+static inline struct page *extract_page_from_push_hpc(
+                struct heca_process *hproc, struct heca_page_cache *hpc)
+{
+        struct page *page = hpc->pages[0];
+        atomic_dec(&hpc->nproc);
+        if (find_first_bit(&hpc->bitmap, hpc->hprocs.num) >= hpc->hprocs.num &&
+                        atomic_cmpxchg(&hpc->nproc, 1, 0) == 1) {
+                heca_push_cache_release(hproc, &hpc, 1);
+        }
+        return page;
+}
+
 /* we arrive with mm semaphore held */
 static int heca_extract_page(struct heca_process *local_hproc,
                 struct heca_process *remote_hproc,
@@ -498,12 +514,21 @@ retry:
         }
 
         if (unlikely(!pte_present(pte_entry))) {
+                struct heca_page_cache *hpc;
+
+                /* perhaps we are already pushing this page? */
+                hpc = heca_push_cache_get(local_hproc, addr, remote_hproc);
+                if (hpc) {
+                        *page = extract_page_from_push_hpc(local_hproc, hpc);
+                        goto pushed_page;
+                }
+
                 /* try and redirect, according to a heca pte */
                 if (!heca_extract_read_hspace_pte(local_hproc, mm, addr,
                                         pte_entry, &pd, hproc_id)) {
                         res = HECA_EXTRACT_REDIRECT;
 
-                        /* it's time to fault the page in... */
+                /* it's time to fault the page in... */
                 } else if (deferred) {
                         pte_unmap_unlock(pd.pte, ptl);
                         if (!heca_initiate_fault_fast(mm, addr, 1))
@@ -550,6 +575,7 @@ retry:
         page_cache_get(*page);
 
         if (!(mr->flags & MR_COPY_ON_ACCESS)) {
+                /* FIXME: Should we not lock the page here?! */
                 flush_cache_page(pd.vma, addr, pte_pfn(pte_entry));
                 ptep_clear_flush(pd.vma, addr, pd.pte);
                 if (read_copy) {
@@ -568,9 +594,11 @@ retry:
                 set_pte_at(mm, addr, pd.pte, pte_entry);
         }
 
+pushed_page:
         *return_pte = *(pd.pte);
 
         pte_unmap_unlock(pd.pte, ptl);
+        /* could not happen for a pushed page */
         if (!(mr->flags & MR_COPY_ON_ACCESS) && !read_copy) {
                 mmu_notifier_invalidate_page(mm, addr);
                 page_cache_release(*page);
@@ -618,23 +646,14 @@ int heca_lookup_page_in_remote(struct heca_process *local_hproc,
                 struct heca_process *remote_hproc, unsigned long addr,
                 struct page **page)
 {
-        struct heca_page_cache *hpc;
+        struct heca_page_cache *hpc = heca_push_cache_get(local_hproc, addr,
+                        remote_hproc);
 
-        hpc = heca_push_cache_get(local_hproc, addr, remote_hproc);
         if (unlikely(!hpc))
-                goto fail;
+                return HECA_EXTRACT_FAIL;
 
-        *page = hpc->pages[0];
-        atomic_dec(&hpc->nproc);
-        if (find_first_bit(&hpc->bitmap, hpc->hprocs.num) >= hpc->hprocs.num &&
-                        atomic_cmpxchg(&hpc->nproc, 1, 0) == 1) {
-                heca_push_cache_release(local_hproc, &hpc, 1);
-        }
-
+        *page = extract_page_from_push_hpc(local_hproc, hpc);
         return HECA_EXTRACT_SUCCESS;
-
-fail:
-        return HECA_EXTRACT_FAIL;
 }
 
 int heca_extract_page_from_remote(struct heca_process *local_hproc,
