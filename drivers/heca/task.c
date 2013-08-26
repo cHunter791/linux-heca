@@ -1,4 +1,9 @@
 #include <linux/pid_namespace.h>
+
+#include "hutils.h"
+#include "hspace.h"
+#include "hproc.h"
+
 #include "ioctl.h"
 #include "task.h"
 #include "base.h"

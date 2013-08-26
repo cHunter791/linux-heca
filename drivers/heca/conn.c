@@ -5,6 +5,10 @@
  */
 #include <linux/list.h>
 
+#include "hutils.h"
+#include "hproc.h"
+#include "hspace.h"
+
 #include "ioctl.h"
 #include "trace.h"
 #include "conn.h"

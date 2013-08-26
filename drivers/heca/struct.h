@@ -93,33 +93,11 @@
 #define HECA_INFLIGHT            0x04
 #define HECA_INFLIGHT_BITPOS     0x02
 
-/*
- * Useful macro for parsing heca processes
- */
-#define for_each_valid_hproc(hprocs, i) \
-        for (i = 0; i < (hprocs).num; i++) \
-if (likely((hprocs).ids[i]))
 
 
 /*
  * HECA DATA structure
  */
-struct heca_space {
-        u32 hspace_id;
-
-        struct radix_tree_root hprocs_tree_root;
-        struct radix_tree_root hprocs_mm_tree_root;
-
-        struct mutex hspace_mutex;
-        struct list_head hprocs_list;
-
-        struct list_head hspace_ptr;
-
-        int nb_local_hprocs;
-
-        struct kobject kobj;
-
-};
 
 
 struct heca_connections_manager {
@@ -255,52 +233,6 @@ struct heca_message {
         u32 rkey;
 };
 
-struct heca_memory_region {
-        unsigned long addr;
-        unsigned long sz;
-        u32 descriptor;
-        u32 hmr_id;
-        u32 flags;
-        struct rb_node rb_node;
-};
-
-struct heca_process {
-        u32 hproc_id;
-        int is_local;
-        struct heca_space *hspace;
-        struct heca_connection *connection;
-        pid_t pid;
-        struct mm_struct *mm;
-        u32 descriptor;
-        struct list_head hproc_ptr;
-
-        struct radix_tree_root page_cache;
-        spinlock_t page_cache_spinlock;
-
-        struct radix_tree_root page_readers;
-        spinlock_t page_readers_spinlock;
-
-        struct radix_tree_root page_maintainers;
-        spinlock_t page_maintainers_spinlock;
-
-        struct radix_tree_root hmr_id_tree_root;
-        struct rb_root hmr_tree_root;
-        struct heca_memory_region *hmr_cache;
-        seqlock_t hmr_seq_lock;
-
-        struct rb_root push_cache;
-        seqlock_t push_cache_lock;
-
-        struct kobject hproc_kobject;
-
-        struct llist_head delayed_gup;
-        struct delayed_work delayed_gup_work;
-
-        struct llist_head deferred_gups;
-        struct work_struct deferred_gup_work;
-
-        atomic_t refs;
-};
 
 
 
@@ -394,21 +326,6 @@ struct heca_deferred_gup {
 };
 
 
-struct heca_module_state {
-        struct heca_connections_manager *hcm;
-        struct mutex heca_state_mutex;
-        spinlock_t radix_lock;
-        struct radix_tree_root hspaces_tree_root;
-        struct radix_tree_root mm_tree_root;
-        struct list_head hspaces_list;
-
-        struct workqueue_struct * heca_rx_wq;
-        struct workqueue_struct * heca_tx_wq;
-
-        struct kobject root_kobj;
-        struct kset *transports_kset;
-        struct kset *hspaces_kset;
-};
 
 struct heca_process_list {
         u32 hspace_id;
