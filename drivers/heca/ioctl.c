@@ -142,5 +142,3 @@ out:
         heca_printk(KERN_DEBUG "<exit> ioctl=0x%X: %d", ioctl, r);
         return r;
 }
-
-
