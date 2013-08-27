@@ -9,6 +9,9 @@
 #include "struct.h"
 #include "push.h"
 #include "base.h"
+#include "rdma.h"
+#include "transport_manager.h"
+#include "conn.h"
 
 /* hproc_descriptors */
 static struct heca_process_list *shsc;

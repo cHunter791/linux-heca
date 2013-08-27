@@ -7,6 +7,9 @@
 #ifndef HECA_STRUCT_H_
 #define HECA_STRUCT_H_
 
+#include "rdma.h"
+#include "transport_manager.h"
+
 #include <rdma/rdma_cm.h>
 #include <rdma/ib_verbs.h>
 #include <linux/spinlock.h>
@@ -29,16 +32,6 @@
 
 #define RDMA_PAGE_SIZE      PAGE_SIZE
 
-#define IB_MAX_CAP_SCQ      256
-#define IB_MAX_CAP_RCQ      1024    /* Heuristic; perhaps raise in the future */
-#define IB_MAX_SEND_SGE     2
-#define IB_MAX_RECV_SGE     2
-
-#define IW_MAX_CAP_SCQ      256
-#define IW_MAX_CAP_RCQ      1024    /* Heuristic; perhaps raise in the future */
-#define IW_MAX_SEND_SGE     2
-#define IW_MAX_RECV_SGE     2
-
 /*
  * TODO: This should be user-configurable using sysfs or via the ioctl. It is
  * a trade-off between performance and the risk of oom-ing. Users disabling
@@ -50,15 +43,6 @@
 
 #define GUP_DELAY           HZ*5    /* 5 second */
 #define REQUEST_FLUSH_DELAY 50      /* 50 usec delay */
-
-/*
- * RDMA_INFO
- */
-#define RDMA_INFO_CL        4
-#define RDMA_INFO_SV        3
-#define RDMA_INFO_READY_CL  2
-#define RDMA_INFO_READY_SV  1
-#define RDMA_INFO_NULL      0
 
 /*
  * HECA Messages
@@ -129,70 +113,6 @@ struct heca_space_kobjects {
         struct kobject *domains_kobject;
 };
 
-struct heca_connections_manager {
-        int node_ip;
-
-        struct rdma_cm_id *cm_id;
-        struct ib_device *dev;
-        struct ib_pd *pd;
-        struct ib_mr *mr;
-
-        struct ib_cq *listen_cq;
-
-        struct mutex hcm_mutex;
-
-        struct rb_root connections_rb_tree_root;
-        seqlock_t connections_lock;
-
-        struct sockaddr_in sin;
-};
-
-struct map_dma {
-        dma_addr_t addr;
-        u64 size;
-        u64 dir;
-};
-
-struct rdma_info_data {
-        struct heca_rdma_info *send_buf;
-        struct heca_rdma_info *recv_buf;
-
-        struct map_dma send_dma;
-        struct map_dma recv_dma;
-        struct heca_rdma_info *remote_info;
-
-        struct ib_sge recv_sge;
-        struct ib_recv_wr recv_wr;
-        struct ib_recv_wr *recv_bad_wr;
-
-        struct ib_sge send_sge;
-        struct ib_send_wr send_wr;
-        struct ib_send_wr *send_bad_wr;
-        int exchanged;
-};
-
-struct rx_buffer {
-        struct rx_buffer_element *rx_buf;
-        int len;
-};
-
-struct tx_buffer {
-        struct tx_buffer_element *tx_buf;
-        int len;
-
-        struct llist_head tx_free_elements_list;
-        struct llist_head tx_free_elements_list_reply;
-        spinlock_t tx_free_elements_list_lock;
-        spinlock_t tx_free_elements_list_reply_lock;
-
-        struct llist_head request_queue;
-        struct mutex  flush_mutex;
-        struct list_head ordered_request_queue;
-        int request_queue_sz;
-        struct work_struct delayed_request_flush_work;
-};
-
-
 struct heca_page_pool_element {
         void *page_buf;
         struct page *mem_page;
@@ -205,48 +125,6 @@ struct heca_space_page_pool {
         int head;
         struct heca_connection *connection;
         struct work_struct work;
-};
-
-struct heca_connection {
-        struct heca_connections_manager *hcm;
-        /* not 100% sure of this atomic regarding barrier*/
-        atomic_t alive;
-
-        struct sockaddr_in local, remote;
-        int remote_node_ip;
-        struct rdma_info_data rid;
-        struct ib_qp_init_attr qp_attr;
-        struct ib_mr *mr;
-        struct ib_pd *pd;
-        struct rdma_cm_id *cm_id;
-
-        struct work_struct send_work;
-        struct work_struct recv_work;
-
-        struct rx_buffer rx_buffer;
-        struct tx_buffer tx_buffer;
-
-        void *page_pool;
-        struct llist_head page_pool_elements;
-        spinlock_t page_pool_elements_lock;
-
-        struct rb_node rb_node;
-
-        struct kobject kobj;
-
-        struct completion completion;
-        struct work_struct delayed_request_flush_work;
-};
-
-struct heca_rdma_info {
-
-        u8 flag;
-        u32 node_ip;
-        u64 buf_msg_addr;
-        u32 rkey_msg;
-        u64 buf_rx_addr;
-        u32 rkey_rx;
-        u32 rx_buf_size;
 };
 
 struct heca_message {
@@ -308,45 +186,6 @@ struct heca_process {
         struct work_struct deferred_gup_work;
 
         atomic_t refs;
-};
-
-
-
-struct heca_work_request_element {
-        struct heca_connection *connection;
-        struct ib_send_wr wr;
-        struct ib_sge sg;
-        struct ib_send_wr *bad_wr;
-        struct map_dma heca_dma;
-};
-
-struct heca_msg_work_request {
-        struct heca_work_request_element *wr_ele;
-        struct heca_page_pool_element *dst_addr;
-        struct heca_page_cache *hpc;
-};
-
-struct heca_recv_work_req_element {
-        struct heca_connection *connection;
-        struct ib_recv_wr sq_wr;
-        struct ib_recv_wr *bad_wr;
-        struct ib_sge recv_sgl;
-};
-
-struct heca_reply_work_request {
-        //The one for sending back a message
-        struct heca_work_request_element *hwr_ele;
-
-        //The one for sending the page
-        struct ib_send_wr wr;
-        struct ib_send_wr *bad_wr;
-        struct page * mem_page;
-        void *page_buf;
-        struct ib_sge page_sgl;
-        pte_t pte;
-        struct mm_struct *mm;
-        unsigned long addr;
-
 };
 
 struct tx_callback {
@@ -450,8 +289,6 @@ struct heca_pte_data {
         pmd_t *pmd;
         pte_t *pte;
 };
-
-
 
 struct heca_swp_data {
         struct heca_space *hspace;

@@ -40,12 +40,4 @@ int create_heca_mr(struct hecaioc_hmr *udata);
 int pushback_ps(struct hecaioc_ps *udata);
 int unmap_ps(struct hecaioc_ps *udata);
 
-/* hcm */
-int create_hcm_listener(struct heca_module_state *, unsigned long,
-                unsigned short);
-int destroy_hcm_listener(struct heca_module_state *);
-int init_hcm(void);
-int fini_hcm(void);
-
 #endif /* _HECA_BASE_H */
-

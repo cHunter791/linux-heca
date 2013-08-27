@@ -8,7 +8,45 @@
 #define _HECA_CONN_H
 
 #include <linux/in.h>
+#include <linux/types.h>
+#include <linux/workqueue.h>
+#include <linux/llist.h>
+#include <linux/kobject.h>
+#include <linux/completion.h>
+#include <linux/spinlock_types.h>
 #include "struct.h"
+#include "rdma.h"
+
+struct heca_connection {
+        struct heca_connections_manager *hcm;
+        /* not 100% sure of this atomic regarding barrier*/
+        atomic_t alive;
+
+        struct sockaddr_in local, remote;
+        int remote_node_ip;
+        struct rdma_info_data rid;
+        struct ib_qp_init_attr qp_attr;
+        struct ib_mr *mr;
+        struct ib_pd *pd;
+        struct rdma_cm_id *cm_id;
+
+        struct work_struct send_work;
+        struct work_struct recv_work;
+
+        struct rx_buffer rx_buffer;
+        struct tx_buffer tx_buffer;
+
+        void *page_pool;
+        struct llist_head page_pool_elements;
+        spinlock_t page_pool_elements_lock;
+
+        struct rb_node rb_node;
+
+        struct kobject kobj;
+
+        struct completion completion;
+        struct work_struct delayed_request_flush_work;
+};
 
 void init_kmem_heca_request_cache(void);
 void destroy_kmem_heca_request_cache(void);
@@ -31,14 +69,7 @@ void create_page_request(struct heca_connection *,
 void create_page_pull_request(struct heca_connection *,
                 struct tx_buffer_element *, u32, u32, u32, u32, uint64_t);
 void listener_cq_handle(struct ib_cq *, void *);
-int server_event_handler(struct rdma_cm_id *, struct rdma_cm_event *);
 inline void heca_msg_cpy(struct heca_message *, struct heca_message *);
-void release_tx_element(struct heca_connection *,
-                struct tx_buffer_element *);
-void release_tx_element_reply(struct heca_connection *,
-                struct tx_buffer_element *);
-void try_release_tx_element(struct heca_connection *,
-                struct tx_buffer_element *);
 int connect_hproc(__u32, __u32, unsigned long, unsigned short);
 unsigned long inet_addr(const char *);
 char *inet_ntoa(unsigned long, char *, int);
@@ -46,7 +77,6 @@ struct tx_buffer_element *try_get_next_empty_tx_ele(
                 struct heca_connection *, int);
 struct tx_buffer_element *try_get_next_empty_tx_reply_ele(
                 struct heca_connection *);
-int destroy_connection(struct heca_connection *);
 int tx_heca_send(struct heca_connection *, struct tx_buffer_element *);
 char *port_ntoa(unsigned short, char *, int);
 char *sockaddr_ntoa(struct sockaddr_in *, char *, int);
