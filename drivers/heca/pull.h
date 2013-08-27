@@ -8,7 +8,7 @@
 #define PULL_TAG        (1 << 0)  /* pulling the page */
 #define PREFETCH_TAG    (1 << 1)  /* pulling the page for prefetch */
 #define PUSH_TAG        (1 << 2)  /* pushing the page */
-#define PULL_TRY_TAG    (1 << 3)  /* pulling the page by request */
+#define PUSH_RES_TAG    (1 << 3)  /* pulling the page by request */
 #define CLAIM_TAG       (1 << 4)  /* reclaiming a page */
 #define READ_TAG        (1 << 5)  /* pulling the page for read */
 
@@ -21,7 +21,7 @@ inline void heca_release_pull_hpc(struct heca_page_cache **);
 void dequeue_and_gup_cleanup(struct heca_process *);
 void delayed_gup_work_fn(struct work_struct *);
 int heca_pull_req_failure(struct heca_page_cache *);
-int heca_swap_wrapper(struct mm_struct *, struct vm_area_struct *,
+int heca_do_page_fault(struct mm_struct *, struct vm_area_struct *,
                 unsigned long, pte_t *, pmd_t *, unsigned int, pte_t,
                 swp_entry_t);
 int heca_trigger_page_pull(struct heca_space *, struct heca_process *,

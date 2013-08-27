@@ -32,6 +32,13 @@
 
 #define RDMA_PAGE_SIZE      PAGE_SIZE
 
+/*
+ * TODO: This should be user-configurable using sysfs or via the ioctl. It is
+ * a trade-off between performance and the risk of oom-ing. Users disabling
+ * oom should set HECA_CONGESTION_THRESHOLD=0.
+ */
+#define HECA_CONGESTION_THRESHOLD 0
+
 #define MAX_HPROCS_PER_PAGE   2
 
 #define GUP_DELAY           HZ*5    /* 5 second */
@@ -41,9 +48,9 @@
  * HECA Messages
  */
 #define MSG_REQ_PAGE                (1 << 0)
-#define MSG_REQ_PAGE_TRY            (1 << 1)
+#define MSG_REQ_PUSHED_PAGE         (1 << 1)
 #define MSG_REQ_READ                (1 << 2)
-#define MSG_REQ_PAGE_PULL           (1 << 3)
+#define MSG_REQ_PUSH                (1 << 3)
 #define MSG_REQ_CLAIM               (1 << 4)
 #define MSG_REQ_CLAIM_TRY           (1 << 5)
 #define MSG_REQ_QUERY               (1 << 6)
@@ -73,8 +80,6 @@
  */
 #define HECA_INFLIGHT            0x04
 #define HECA_INFLIGHT_BITPOS     0x02
-#define HECA_PUSHING             0x08
-#define HECA_PUSHING_BITPOS      0x03
 
 /*
  * Useful macro for parsing heca processes

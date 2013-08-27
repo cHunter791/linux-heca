@@ -339,7 +339,7 @@ void dequeue_and_gup_cleanup(struct heca_process *hproc)
                  * do the if check
                  */
                 hpc = heca_cache_get_hold(hproc, ddf->addr);
-                if (hpc && (hpc->tag & (PREFETCH_TAG | PULL_TRY_TAG))) {
+                if (hpc && (hpc->tag & (PREFETCH_TAG | PUSH_RES_TAG))) {
                         atomic_dec(&hpc->nproc);
                         heca_release_pull_hpc(&hpc);
                 }
@@ -402,7 +402,7 @@ static void heca_initiate_pull_gup(struct heca_page_cache *hpc, int delayed)
         if (unlikely(!mr))
                 return;
 
-        heca_initiate_fault(hproc->mm, hpc->addr, hpc->tag == PULL_TRY_TAG ||
+        heca_initiate_fault(hproc->mm, hpc->addr, hpc->tag == PUSH_RES_TAG ||
                         (~mr->flags & MR_SHARED));
 }
 
@@ -419,11 +419,11 @@ static void dequeue_and_gup(struct heca_process *hproc)
                 hpc = heca_cache_get_hold(hproc, hdf->addr);
                 if (hpc) {
                         /*
-                         * this might be another PULL_TRY or PREFETCH, if page has been
+                         * this might be another PUSH_RES or PREFETCH, if page has been
                          * faulted, pushed and re-brought in the meanwhile. but no harm
                          * in faulting it in anyway.
                          */
-                        if (hpc->tag & (PREFETCH_TAG | PULL_TRY_TAG))
+                        if (hpc->tag & (PREFETCH_TAG | PUSH_RES_TAG))
                                 heca_initiate_pull_gup(hpc, 1);
                         heca_release_pull_hpc(&hpc);
                 }
@@ -482,14 +482,9 @@ unlock:
                 lru_add_drain();
 
                 /* try to delay faulting pages that were prefetched or pushed to us */
-                if (hpc->tag & (PREFETCH_TAG | PULL_TRY_TAG)) {
+                if (hpc->tag & (PREFETCH_TAG | PUSH_RES_TAG)) {
                         struct heca_delayed_fault *hdf;
 
-                        /*
-                         * FIXME: Immediate gup might cause shrink_page_list to deadlock if
-                         * reclaiming in the gup. Happens when working with cgroups, and
-                         * doing wait_on_page_writeback in the second claim iteration.
-                         */
                         hdf = alloc_heca_delayed_fault_cache_elm(hpc->addr);
                         if (likely(hdf))
                                 queue_ddf_for_delayed_gup(hdf, hpc->hproc);
@@ -578,64 +573,6 @@ static struct page *heca_get_remote_page(struct vm_area_struct *vma,
 
 out:
         return page;
-}
-
-static struct heca_page_cache *heca_cache_add_pushed(
-                struct heca_process *fault_hproc,
-                struct heca_memory_region *fault_mr,
-                struct heca_process_list hprocs, unsigned long addr,
-                struct page *page)
-{
-        struct heca_page_cache *new_hpc = NULL, *found_hpc = NULL;
-        int r, i;
-
-        do {
-                found_hpc = heca_cache_get_hold(fault_hproc, addr);
-                if (unlikely(found_hpc))
-                        goto fail;
-
-                if (!new_hpc) {
-                        /*
-                         * we always need PULL_TAG here, as we tried to push a page we were
-                         * previously maintaining.
-                         */
-                        new_hpc = heca_alloc_hpc(fault_hproc, addr,
-                                        hprocs, 3, PULL_TAG);
-                        if (!new_hpc)
-                                goto fail;
-                        new_hpc->pages[0] = page;
-                        atomic_set(&new_hpc->found, 0);
-                }
-
-                r = radix_tree_preload(GFP_HIGHUSER_MOVABLE & GFP_KERNEL);
-                if (unlikely(r))
-                        goto fail;
-
-                spin_lock_irq(&fault_hproc->page_cache_spinlock);
-                r = radix_tree_insert(&fault_hproc->page_cache, addr, new_hpc);
-                spin_unlock_irq(&fault_hproc->page_cache_spinlock);
-                radix_tree_preload_end();
-                if (likely(!r)) {
-                        for_each_valid_hproc(hprocs, i) {
-                                struct heca_process *remote_proc;
-
-                                remote_proc = find_hproc(fault_hproc->hspace,
-                                                hprocs.ids[i]);
-                                if (likely(remote_proc)) {
-                                        heca_claim_page(fault_hproc, remote_proc,
-                                                        fault_mr, addr,
-                                                        NULL, 0);
-                                        release_hproc(remote_proc);
-                                }
-                        }
-                        return new_hpc;
-                }
-        } while (r != -ENOMEM);
-
-fail:
-        if (new_hpc)
-                heca_dealloc_hpc(&new_hpc);
-        return found_hpc;
 }
 
 static struct heca_page_cache *heca_cache_add_send(
@@ -810,7 +747,7 @@ static int get_heca_page(struct mm_struct *mm, unsigned long addr,
                                 if (swp_entry_to_heca_data(swp_e, &dsd) < 0)
                                         goto out;
 
-                                if (dsd.flags & (HECA_INFLIGHT | HECA_PUSHING))
+                                if (dsd.flags & HECA_INFLIGHT)
                                         goto out;
 
                                 /*
@@ -829,61 +766,6 @@ static int get_heca_page(struct mm_struct *mm, unsigned long addr,
 
 out:
         return ret;
-}
-
-/*
- * we were maintainers at some point, and we are certain to exit with all the
- * read copies we issued invalidated. we either discard the push operation
- * mid-way, or continue as usual after its completion. if some other maintainer
- * issued read copies in the meanwhile, it will invalidate them when we request
- * the page from it.
- */
-static struct heca_page_cache *convert_push_hpc(
-                struct heca_process *fault_hproc,
-                struct heca_memory_region *fault_mr, unsigned long norm_addr,
-                struct heca_swp_data hsd)
-{
-        struct heca_page_cache *push_hpc, *hpc;
-        struct page *page;
-        unsigned long addr, bit;
-
-        hpc = heca_cache_get_hold(fault_hproc, norm_addr);
-        if (hpc)
-                goto out;
-
-        push_hpc = heca_push_cache_get_remove(fault_hproc, norm_addr);
-        if (likely(push_hpc)) {
-                page = push_hpc->pages[0];
-                /*
-                 * decrease page refcount as to surrogate for all the hprocs that didn't
-                 * answer yet; then increase by two, as this is the correct, "found"
-                 * page.
-                 */
-                do {
-                        bit = find_first_bit(&push_hpc->bitmap,
-                                        push_hpc->hprocs.num);
-                        if (bit >= push_hpc->hprocs.num)
-                                break;
-                        if (test_and_clear_bit(bit, &push_hpc->bitmap))
-                                page_cache_release(page);
-                } while(1);
-                page_cache_get(page);
-                page_cache_get(page); /* intentionally duplicate */
-
-                SetPageSwapBacked(page);
-                SetPageUptodate(page);
-                ClearPageDirty(page);
-                TestClearPageWriteback(page);
-
-                addr = push_hpc->addr;
-                if (atomic_cmpxchg(&push_hpc->nproc, 1, 0) == 1)
-                        heca_dealloc_hpc(&push_hpc);
-                hpc = heca_cache_add_pushed(fault_hproc, fault_mr,
-                                hsd.hprocs, addr, page);
-        }
-
-out:
-        return hpc;
 }
 
 static int inflight_wait(pte_t *page_table, pte_t *orig_pte, swp_entry_t *entry,
@@ -994,7 +876,7 @@ static int heca_maintain_notify(struct heca_process *hproc,
         return r;
 }
 
-static int do_heca_page_fault(struct mm_struct *mm, struct vm_area_struct *vma,
+int heca_do_page_fault(struct mm_struct *mm, struct vm_area_struct *vma,
                 unsigned long address, pte_t *page_table, pmd_t *pmd,
                 unsigned int flags, pte_t orig_pte, swp_entry_t entry)
 {
@@ -1013,7 +895,6 @@ static int do_heca_page_fault(struct mm_struct *mm, struct vm_area_struct *vma,
         unsigned long shared_addr; /* used only for trace record later */
         struct heca_space *hspace;
 
-retry:
         /* if the data in the swp_entry is invalid, we have nothing to do */
         if (swp_entry_to_heca_data(entry, &hsd) < 0)
                 return VM_FAULT_ERROR;
@@ -1035,6 +916,7 @@ retry:
         if ((fault_mr->flags & MR_SHARED) && ~flags & FAULT_FLAG_WRITE)
                 read_fault = 1;
 
+        /* these scalars are for tracing */
         hspace_id = hspace->hspace_id;
         hproc_id = fault_hproc->hproc_id;
         mr_id = fault_mr->hmr_id;
@@ -1043,30 +925,22 @@ retry:
                         shared_addr, hsd.flags);
 
         /*
-         * If page is currently being pushed, halt the push, re-claim the page and
-         * notify other nodes. If page is absent since we're answering a remote
-         * fault, wait for it to finish before faulting ourselves.
+         * If page is absent since we're answering a remote fault, wait for it
+         * to finish before faulting ourselves.
          */
-        if (unlikely(hsd.flags)) {
-                if (hsd.flags & HECA_PUSHING) {
-                        hpc = convert_push_hpc(fault_hproc, fault_mr,
-                                        norm_addr, hsd);
-                        if (likely(hpc))
-                                goto lock;
-                } else if (hsd.flags & HECA_INFLIGHT) {
-                        int inflight = inflight_wait(page_table, &orig_pte,
-                                        &entry, &hsd);
+        if (unlikely(hsd.flags && hsd.flags & HECA_INFLIGHT)) {
+                int inflight = inflight_wait(page_table, &orig_pte,
+                                &entry, &hsd);
 
-                        if (inflight) {
-                                if (inflight == -EFAULT) {
-                                        ret = VM_FAULT_ERROR;
-                                } else {
-                                        ret |= VM_FAULT_RETRY;
-                                        up_read(&mm->mmap_sem);
-                                }
-                                release_hproc(fault_hproc);
-                                goto out_no_dpc;
+                if (inflight) {
+                        if (inflight == -EFAULT) {
+                                ret = VM_FAULT_ERROR;
+                        } else {
+                                ret |= VM_FAULT_RETRY;
+                                up_read(&mm->mmap_sem);
                         }
+                        release_hproc(fault_hproc);
+                        goto out_no_dpc;
                 }
         }
 
@@ -1095,13 +969,13 @@ retry:
                 count_vm_event(PGMAJFAULT);
                 mem_cgroup_count_vm_event(mm, PGMAJFAULT);
 
-                /*
-                 * we requested a read copy initially, but now we need to write. as a read
-                 * response is already underway, we will try to fault it in ASAP and then
-                 * go through heca_write_fault to claim it. it's better than discarding it
-                 * and write faulting, as a page is already ready and page contents already
-                 * being transferred to us (CLAIM req is cheaper).
-                 */
+        /*
+         * we requested a read copy initially, but now we need to write. as a read
+         * response is already underway, we will try to fault it in ASAP and then
+         * go through heca_write_fault to claim it. it's better than discarding it
+         * and write faulting, as a page is already ready and page contents already
+         * being transferred to us (CLAIM req is cheaper).
+         */
         } else if (!read_fault && (hpc->tag & READ_TAG ||
                                 (hpc->tag & PREFETCH_TAG &&
                                  fault_mr->flags & MR_SHARED))) {
@@ -1113,7 +987,7 @@ retry:
          * do not prefetch if we have the NOWAIT flag, as prefetch will be
          * triggered in the async PF
          */
-        if (hpc->tag != PULL_TRY_TAG && flags & FAULT_FLAG_ALLOW_RETRY &&
+        if (hpc->tag != PUSH_RES_TAG && flags & FAULT_FLAG_ALLOW_RETRY &&
                         ~flags & FAULT_FLAG_RETRY_NOWAIT) {
                 if (heca_fault_do_readahead(mm, norm_addr, fault_hproc,
                                         fault_mr, hpc))
@@ -1136,11 +1010,6 @@ resolve:
         found = atomic_read(&hpc->found);
         if (unlikely(found < 0)) {
                 unlock_page(hpc->pages[0]);
-                /* caught a failed PULL_TRY dpc before it was released; retry */
-                if (hpc->tag == PULL_TRY_TAG) {
-                        heca_release_pull_hpc(&hpc);
-                        goto retry;
-                }
                 ret = VM_FAULT_ERROR;
                 goto out;
         }
@@ -1179,10 +1048,7 @@ resolve:
         inc_mm_counter(mm, MM_ANONPAGES);
         pte = mk_pte(found_page, vma->vm_page_prot);
 
-        /* this is delicate - has to handle the convert_push_dpc case too */
-        write = !finalize_write &&
-                (!read_fault || hpc->tag & (PULL_TRY_TAG | PULL_TAG));
-
+        write = !finalize_write && !read_fault;
         if (likely(reuse_heca_page(found_page, norm_addr, hpc))) {
                 if (write) {
                         pte = maybe_mkwrite(pte_mkdirty(pte), vma);
@@ -1280,21 +1146,6 @@ out_no_dpc:
         return ret;
 }
 
-int heca_swap_wrapper(struct mm_struct *mm, struct vm_area_struct *vma,
-                unsigned long address, pte_t *page_table, pmd_t *pmd,
-                unsigned int flags, pte_t orig_pte, swp_entry_t entry)
-{
-
-#if defined(CONFIG_HECA) || defined(CONFIG_HECA_MODULE)
-        return do_heca_page_fault(mm, vma, address, page_table, pmd, flags,
-                        orig_pte, entry);
-
-#else
-        return 0;
-#endif
-
-}
-
 int heca_trigger_page_pull(struct heca_space *hspace,
                 struct heca_process *local_hproc, struct heca_memory_region *mr,
                 unsigned long norm_addr)
@@ -1302,9 +1153,17 @@ int heca_trigger_page_pull(struct heca_space *hspace,
         int r = 0;
         struct mm_struct *mm = local_hproc->mm;
 
+        /*
+         * FIXME: There is a possible yet very unlikely edge case here. If a
+         * page is faulted-in to us, we extract it and then it is pushed to us,
+         * the original hpc might still be in the tree due to some slow
+         * operation (slow hpc release, slow answering RRAIM node). In this case
+         * the push will silently fail and we will lose the page and have a
+         * memleak on the remote node.
+         */
         down_read(&mm->mmap_sem);
         r = get_heca_page(mm, norm_addr + mr->addr, local_hproc, mr,
-                        PULL_TRY_TAG);
+                        PUSH_RES_TAG);
         up_read(&mm->mmap_sem);
 
         return r;
@@ -1363,9 +1222,9 @@ retry:
         page_cache_get(page);
 
         hpc = heca_cache_get_hold(hproc, addr);
-        if (unlikely(hpc)) {
+        if (hpc) {
                 /* these should be handled in the first do_heca_page_fault */
-                BUG_ON(hpc->tag == PULL_TRY_TAG);
+                BUG_ON(hpc->tag == PUSH_RES_TAG);
 
                 if (hpc->tag == CLAIM_TAG) {
                         pte_unmap_unlock(ptep, ptl);

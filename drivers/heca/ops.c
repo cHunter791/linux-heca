@@ -20,6 +20,10 @@
  * the same args. if not enough mem to queue the request, we have no choice but
  * to reschedule, in hope an existing tx_e will push a page and free mem. but in
  * this case, when we wake, we might find an available tx_e.
+ *
+ * note: message ordering is not guaranteed. while previous requests are being
+ * flushed, a new msg might take a tx element that has been released in the
+ * meanwhile.
  */
 static int heca_send_msg(struct heca_connection *ele, u32 hspace_id, u32 mr_id,
                 u32 src_id, u32 dest_id, unsigned long local_addr,
@@ -127,7 +131,7 @@ static int send_request_heca_page_pull(struct heca_process *fault_hproc,
                 if (tx_elms[i]) {
                         /* note that dest_id == local_hproc */
                         r |= heca_send_tx_e(cons[i], tx_elms[i], 0,
-                                        MSG_REQ_PAGE_PULL,
+                                        MSG_REQ_PUSH,
                                         fault_hproc->hspace->hspace_id,
                                         fault_mr->hmr_id, hprocs.ids[i],
                                         fault_hproc->hproc_id,
@@ -136,7 +140,7 @@ static int send_request_heca_page_pull(struct heca_process *fault_hproc,
                 } else if (reqs[i]) {
                         /* can't fail, reqs[i] already allocated */
                         j = add_heca_request(reqs[i], cons[i],
-                                        MSG_REQ_PAGE_PULL,
+                                        MSG_REQ_PUSH,
                                         fault_hproc->hspace->hspace_id,
                                         hprocs.ids[i], fault_mr->hmr_id,
                                         fault_hproc->hproc_id, addr, NULL, NULL,
@@ -206,8 +210,8 @@ int heca_request_page(struct page *page, struct heca_process *remote_hproc,
         int type;
 
         switch (tag) {
-        case PULL_TRY_TAG:
-                type = MSG_REQ_PAGE_TRY;
+        case PUSH_RES_TAG:
+                type = MSG_REQ_PUSHED_PAGE;
                 break;
         case READ_TAG:
                 type = MSG_REQ_READ;
@@ -420,7 +424,7 @@ static int try_redirect_page_request(struct heca_connection *conn,
                 struct heca_message *msg, struct heca_process *remote_hproc,
                 u32 id)
 {
-        if (msg->type == MSG_REQ_PAGE_TRY || id == remote_hproc->hproc_id)
+        if (msg->type == MSG_REQ_PUSHED_PAGE || id == remote_hproc->hproc_id)
                 return -EFAULT;
 
         msg->dest_id = id;
@@ -649,9 +653,16 @@ retry:
         tx_e->reply_work_req->mm = local_hproc->mm;
         tx_e->reply_work_req->addr = addr;
 
-        res = heca_extract_page_from_remote(local_hproc, remote_hproc, addr,
-                        msg->type, &tx_e->reply_work_req->pte, &page,
-                        &redirect_id, deferred, mr);
+        if (msg->type == MSG_REQ_PUSHED_PAGE) {
+                res = heca_lookup_page_in_remote(local_hproc, remote_hproc,
+                                addr, &page);
+                /* TODO: this is for send_msg_handler, easily improvable */
+                tx_e->reply_work_req->pte.pte = 0;
+        } else {
+                res = heca_extract_page_from_remote(local_hproc, remote_hproc,
+                                addr, msg->type, &tx_e->reply_work_req->pte,
+                                &page, &redirect_id, deferred, mr);
+        }
         if (unlikely(res != HECA_EXTRACT_SUCCESS))
                 goto no_page;
 
@@ -681,7 +692,7 @@ no_page:
                         goto fail;
                 goto out;
 
-                /* defer and try to get the page again out of sequence */
+        /* defer and try to get the page again out of sequence */
         } else if (msg->type & (MSG_REQ_PAGE | MSG_REQ_READ)) {
                 trace_heca_defer_gup(local_hproc->hspace->hspace_id,
                                 local_hproc->hproc_id, remote_hproc->hproc_id,
