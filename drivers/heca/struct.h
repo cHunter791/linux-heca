@@ -29,6 +29,13 @@
 
 #define RDMA_PAGE_SIZE      PAGE_SIZE
 
+/*
+ * TODO: This should be user-configurable using sysfs or via the ioctl. It is
+ * a trade-off between performance and the risk of oom-ing. Users disabling
+ * oom should set HECA_CONGESTION_THRESHOLD=0.
+ */
+#define HECA_CONGESTION_THRESHOLD 0
+
 #define IB_MAX_CAP_SCQ      256
 #define IB_MAX_CAP_RCQ      1024    /* Heuristic; perhaps raise in the future */
 #define IB_MAX_SEND_SGE     2
@@ -38,13 +45,6 @@
 #define IW_MAX_CAP_RCQ      1024    /* Heuristic; perhaps raise in the future */
 #define IW_MAX_SEND_SGE     2
 #define IW_MAX_RECV_SGE     2
-
-/*
- * TODO: This should be user-configurable using sysfs or via the ioctl. It is
- * a trade-off between performance and the risk of oom-ing. Users disabling
- * oom should set HECA_CONGESTION_THRESHOLD=0.
- */
-#define HECA_CONGESTION_THRESHOLD 0
 
 #define MAX_HPROCS_PER_PAGE   2
 
