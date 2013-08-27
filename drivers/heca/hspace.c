@@ -191,7 +191,6 @@ int create_hspace(__u32 hspace_id)
         INIT_RADIX_TREE(&new_hspace->hprocs_mm_tree_root,
                         GFP_KERNEL & ~__GFP_WAIT);
         INIT_LIST_HEAD(&new_hspace->hprocs_list);
-        new_hspace->nb_local_hprocs = 0;
 
         while (1) {
                 r = radix_tree_preload(GFP_HIGHUSER_MOVABLE & GFP_KERNEL);
