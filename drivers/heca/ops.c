@@ -4,6 +4,11 @@
  * Aidan Shribman <aidan.shribman@sap.com> 2012 (c)
  */
 #include <linux/pagemap.h>
+
+#include "hutils.h"
+#include "hproc.h"
+
+
 #include "ioctl.h"
 #include "trace.h"
 #include "struct.h"

@@ -14,6 +14,9 @@
 #include <asm-generic/cacheflush.h>
 #include "../../../mm/internal.h"
 
+#include "hutils.h"
+#include "hproc.h"
+
 #include "ioctl.h"
 #include "trace.h"
 #include "struct.h"
