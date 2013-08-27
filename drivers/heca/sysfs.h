@@ -8,7 +8,6 @@
 
 #include <linux/kobject.h>
 #include "struct.h"
-#include "transport_manager.h"
 
 int create_hproc_sysfs_entry(struct heca_process *);
 void delete_hproc_sysfs_entry(struct kobject *);
