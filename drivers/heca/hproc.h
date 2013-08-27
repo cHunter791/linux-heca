@@ -19,6 +19,7 @@
 #include "struct.h"
 #include "hspace.h"
 #include "mr.h"
+#include "hutils.h"
 
 /*
  * Useful macro for parsing heca processes
@@ -54,7 +55,7 @@ struct heca_process {
         struct rb_root push_cache;
         seqlock_t push_cache_lock;
 
-        struct kobject hproc_kobject;
+        struct kobject kobj;
 
         struct llist_head delayed_gup;
         struct delayed_work delayed_gup_work;
@@ -77,8 +78,6 @@ struct heca_process *find_any_hproc(struct heca_space *,
                 struct heca_process_list);
 struct heca_process *find_local_hproc_from_list(struct heca_space *);
 int is_hproc_local(struct heca_process *);
-int deregister_hspace(__u32);
-int register_hspace(struct hecaioc_hspace *);
 
 
 #endif /* HPROC_H_ */

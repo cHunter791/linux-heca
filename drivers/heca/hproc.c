@@ -21,55 +21,52 @@
 #define HPROCS_KSET             "process"
 #define MRS_KSET                "memory_regions"
 
-#define to_hproc(p)             container_of(s, struct heca_process, kobj)
+#define to_hproc(p)             container_of(p, struct heca_process, kobj)
 #define to_hproc_attr(pa)       container_of(pa, struct hproc_attr, attr)
 
 static void destroy_hproc_mrs(struct heca_process *hproc);
 
-int deregister_hspace(__u32 hspace_id)
+/*
+ * Heca proc  Kobject
+ */
+
+struct hproc_attr {
+        struct attribute attr;
+        ssize_t(*show)(struct heca_process *, char *);
+        ssize_t(*store)(struct heca_process *, char *, size_t);
+};
+
+static void kobj_hproc_release(struct kobject *k)
 {
-        struct heca_module_state *heca_state = get_heca_module_state();
-        int ret = 0;
-        struct heca_space *hspace;
-        struct list_head *curr, *next;
-
-        heca_printk(KERN_DEBUG "<enter> hspace_id=%d", hspace_id);
-        list_for_each_safe (curr, next, &heca_state->hspaces_list) {
-                hspace = list_entry(curr, struct heca_space, hspace_ptr);
-                if (hspace->hspace_id == hspace_id)
-                        remove_hspace(hspace);
-        }
-
-        destroy_hcm_listener(heca_state);
-        heca_printk(KERN_DEBUG "<exit> %d", ret);
-        return ret;
+        heca_printk(KERN_DEBUG, "Releasing kobject %p", k);
 }
 
-int register_hspace(struct hecaioc_hspace *hspace_info)
+static ssize_t hproc_show(struct kobject *k, struct attribute *a,
+                char *buffer)
 {
-        struct heca_module_state *heca_state = get_heca_module_state();
-        int rc;
-
-        heca_printk(KERN_DEBUG "<enter>");
-
-        if ((rc = create_hcm_listener(heca_state,
-                                        hspace_info->local.sin_addr.s_addr,
-                                        hspace_info->local.sin_port))) {
-                heca_printk(KERN_ERR "create_hcm %d", rc);
-                goto done;
-        }
-
-        if ((rc = create_hspace(hspace_info->hspace_id))) {
-                heca_printk(KERN_ERR "create_hspace %d", rc);
-                goto done;
-        }
-
-done:
-        if (rc)
-                deregister_hspace(hspace_info->hspace_id);
-        heca_printk(KERN_DEBUG "<exit> %d", rc);
-        return rc;
+        struct heca_process *hproc = to_hproc(k);
+        struct hproc_attr *hproc_attr = to_hproc_attr(a);
+        if (hproc_attr->show)
+                return hproc_attr->show(hproc,buffer);
+        return 0;
 }
+
+static struct hproc_attr *hproc_attr[] = {
+        NULL
+};
+
+static struct sysfs_ops hproc_ops = {
+        .show = hproc_show,
+};
+
+static struct kobj_type ktype_hproc = {
+        .release = kobj_hproc_release,
+        .sysfs_ops = &hproc_ops,
+        .default_attrs = (struct attribute **) hproc_attr,
+};
+
+
+
 
 inline int is_hproc_local(struct heca_process *hproc)
 {

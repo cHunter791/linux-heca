@@ -11,6 +11,8 @@
 #include "hutils.h"
 #include "hproc.h"
 
+#include "base.h"
+
 
 #define HSPACE_KOBJECT          "%u"
 
@@ -55,6 +57,56 @@ static struct kobj_type ktype_hspace = {
         .sysfs_ops = &heca_space_ops,
         .default_attrs = (struct attribute **) hspace_attr,
 };
+
+
+/* 
+ * Main Hspace function 
+ */
+
+int deregister_hspace(__u32 hspace_id)
+{
+        struct heca_module_state *heca_state = get_heca_module_state();
+        int ret = 0;
+        struct heca_space *hspace;
+        struct list_head *curr, *next;
+
+        heca_printk(KERN_DEBUG "<enter> hspace_id=%d", hspace_id);
+        list_for_each_safe (curr, next, &heca_state->hspaces_list) {
+                hspace = list_entry(curr, struct heca_space, hspace_ptr);
+                if (hspace->hspace_id == hspace_id)
+                        remove_hspace(hspace);
+        }
+
+        destroy_hcm_listener(heca_state);
+        heca_printk(KERN_DEBUG "<exit> %d", ret);
+        return ret;
+}
+
+int register_hspace(struct hecaioc_hspace *hspace_info)
+{
+        struct heca_module_state *heca_state = get_heca_module_state();
+        int rc;
+
+        heca_printk(KERN_DEBUG "<enter>");
+
+        if ((rc = create_hcm_listener(heca_state,
+                                        hspace_info->local.sin_addr.s_addr,
+                                        hspace_info->local.sin_port))) {
+                heca_printk(KERN_ERR "create_hcm %d", rc);
+                goto done;
+        }
+
+        if ((rc = create_hspace(hspace_info->hspace_id))) {
+                heca_printk(KERN_ERR "create_hspace %d", rc);
+                goto done;
+        }
+
+done:
+        if (rc)
+                deregister_hspace(hspace_info->hspace_id);
+        heca_printk(KERN_DEBUG "<exit> %d", rc);
+        return rc;
+}
 
 struct heca_space *find_hspace(u32 id)
 {
