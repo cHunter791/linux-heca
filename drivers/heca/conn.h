@@ -51,8 +51,8 @@ int tx_heca_send(struct heca_connection *, struct tx_buffer_element *);
 char *port_ntoa(unsigned short, char *, int);
 char *sockaddr_ntoa(struct sockaddr_in *, char *, int);
 char *conn_ntoa(struct sockaddr_in *, struct sockaddr_in *, char *, int);
-int heca_send_tx_e(struct heca_connection *, struct tx_buffer_element *, int, int, u32,
-                u32, u32, u32, unsigned long, unsigned long,
+int heca_send_tx_e(struct heca_connection *, struct tx_buffer_element *, int,
+                int, u32, u32, u32, u32, unsigned long, unsigned long,
                 struct heca_page_cache *, struct page *,
                 struct heca_page_pool_element *, int,
                 int (*)(struct tx_buffer_element *), struct heca_message *);
