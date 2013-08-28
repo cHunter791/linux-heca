@@ -83,7 +83,7 @@ void destroy_heca_module_state(void)
 
         list_for_each_safe (curr, next, &heca_state->hspaces_list) {
                 hspace = list_entry(curr, struct heca_space, hspace_ptr);
-                release_hspace(hspace);
+                teardown_hspace(hspace);
         }
 
         destroy_hcm_listener(heca_state);
@@ -165,6 +165,7 @@ static void cleanup_heca_module_state_ksets(
 {
         kset_unregister(heca_state->hspaces_kset);
         kobject_del(&heca_state->root_kobj);
+        /* FIXME: we need to do a put and then cleanup the rest */
 }
 
 /*

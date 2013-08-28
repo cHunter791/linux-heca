@@ -34,7 +34,7 @@ static void remove_hspace(struct heca_space *hspace)
 
         list_for_each_safe (pos, n, &hspace->hprocs_list) {
                 hproc = list_entry(pos, struct heca_process, hproc_ptr);
-                remove_hproc(hspace->hspace_id, hproc->hproc_id);
+                teardown_hproc(hproc);
         }
 
         mutex_lock(&heca_state->heca_state_mutex);
@@ -50,7 +50,8 @@ static void remove_hspace(struct heca_space *hspace)
 
 }
 
-void release_hspace(struct heca_space *hspace)
+
+void teardown_hspace(struct heca_space *hspace)
 {
         /* we remove sysfs entry */
         kobject_del(&hspace->kobj);
@@ -114,7 +115,7 @@ int deregister_hspace(__u32 hspace_id)
         list_for_each_safe (curr, next, &heca_state->hspaces_list) {
                 hspace = list_entry(curr, struct heca_space, hspace_ptr);
                 if (hspace->hspace_id == hspace_id)
-                        release_hspace(hspace);
+                        teardown_hspace(hspace);
         }
 
         destroy_hcm_listener(heca_state);

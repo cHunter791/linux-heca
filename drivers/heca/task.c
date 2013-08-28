@@ -67,11 +67,10 @@ int heca_attach_task(struct task_struct *tsk)
 
 int heca_detach_task(struct task_struct *tsk)
 {
-        int ret = 0;
+        int ret = 0, local_left;
         struct heca_space *hspace;
         struct heca_process *hproc;
         struct list_head *pos, *n, *it;
-retry:
         list_for_each (pos, &get_heca_module_state()->hspaces_list) {
                 hspace = list_entry(pos, struct heca_space, hspace_ptr);
                 list_for_each_safe (it, n, &hspace->hprocs_list) {
@@ -83,16 +82,29 @@ retry:
                                 heca_printk(KERN_DEBUG "removing HPROC "
                                                 "associated with pid %d",
                                                 hproc->pid);
-                                remove_hproc(hspace->hspace_id,
-                                                hproc->hproc_id);
+                                teardown_hproc(hproc);
                         } else {
                                 rcu_read_unlock();
                         }
                 }
-                /* FIXME we need to remove the hspace if we are the last local
-                 * hproc
-                 */
         }
+retry:
+        /* we cleanup the hspace without any local hproc left */
+        list_for_each (pos, &get_heca_module_state()->hspaces_list) {
+                hspace = list_entry(pos, struct heca_space, hspace_ptr);
+                local_left=0;
+                list_for_each_safe (it, n, &hspace->hprocs_list) {
+                        hproc = list_entry(it, struct heca_process, hproc_ptr);
+                        local_left += is_hproc_local(hproc);
+                }
+                if(!local_left){
+                        teardown_hspace(hspace);
+                        pos=NULL;
+                        goto retry;
+                }
+
+        }
+
         return ret;
 }
 

@@ -33,5 +33,5 @@ struct heca_space *find_hspace(u32);
 int create_hspace(__u32);
 int deregister_hspace(__u32 );
 int register_hspace(struct hecaioc_hspace *);
-void release_hspace(struct heca_space *);
+void teardown_hspace(struct heca_space *);
 #endif /* HSPACE_H_ */

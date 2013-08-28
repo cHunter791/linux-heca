@@ -1753,8 +1753,7 @@ static void remove_hprocs_for_conn(struct heca_connection *conn)
                         hproc = list_entry(it, struct heca_process,
                                         hproc_ptr);
                         if (hproc->connection == conn)
-                                remove_hproc(hspace->hspace_id,
-                                                hproc->hproc_id);
+                                teardown_hproc(hproc);
                 }
         }
 }
