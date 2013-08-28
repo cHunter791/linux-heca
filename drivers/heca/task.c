@@ -71,7 +71,7 @@ int heca_detach_task(struct task_struct *tsk)
         struct heca_space *hspace;
         struct heca_process *hproc;
         struct list_head *pos, *n, *it;
-
+retry:
         list_for_each (pos, &get_heca_module_state()->hspaces_list) {
                 hspace = list_entry(pos, struct heca_space, hspace_ptr);
                 list_for_each_safe (it, n, &hspace->hprocs_list) {
@@ -89,6 +89,9 @@ int heca_detach_task(struct task_struct *tsk)
                                 rcu_read_unlock();
                         }
                 }
+                /* FIXME we need to remove the hspace if we are the last local
+                 * hproc
+                 */
         }
         return ret;
 }
