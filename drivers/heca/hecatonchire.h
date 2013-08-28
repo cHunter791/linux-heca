@@ -27,7 +27,6 @@ struct heca_module_state {
         struct workqueue_struct * heca_tx_wq;
 
         struct kobject root_kobj;
-        struct kset *transports_kset;
         struct kset *hspaces_kset;
 };
 
