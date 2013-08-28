@@ -257,7 +257,6 @@ int create_hproc(struct hecaioc_hproc *hproc_info)
                 }
 
                 new_hproc->mm = mm;
-                new_hproc->hspace->nb_local_hprocs++;
                 new_hproc->hmr_tree_root = RB_ROOT;
                 seqlock_init(&new_hproc->hmr_seq_lock);
                 new_hproc->hmr_cache = NULL;
@@ -484,7 +483,6 @@ void remove_hproc(u32 hspace_id, u32 hproc_id)
                 cancel_delayed_work_sync(&hproc->delayed_gup_work);
                 // to make sure everything is clean
                 dequeue_and_gup_cleanup(hproc);
-                hspace->nb_local_hprocs--;
                 radix_tree_delete(&hspace->hprocs_mm_tree_root,
                                 (unsigned long) hproc->mm);
         }

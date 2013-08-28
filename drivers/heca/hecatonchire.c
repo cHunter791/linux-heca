@@ -83,7 +83,7 @@ void destroy_heca_module_state(void)
 
         list_for_each_safe (curr, next, &heca_state->hspaces_list) {
                 hspace = list_entry(curr, struct heca_space, hspace_ptr);
-                remove_hspace(hspace);
+                release_hspace(hspace);
         }
 
         destroy_hcm_listener(heca_state);
@@ -153,15 +153,8 @@ static int setup_heca_module_state_ksets(struct heca_module_state *heca_state)
                         &heca_state->root_kobj);
         if(!heca_state->hspaces_kset)
                 goto err_root;
-        heca_state->transports_kset = kset_create_and_add(TRANSPORTS_KSET,
-                        NULL, &heca_state->root_kobj);
-        if(!heca_state->transports_kset)
-                goto err_hspaces;
-
         return 0;
 
-err_hspaces:
-        kset_unregister(heca_state->hspaces_kset);
 err_root:
         kobject_del(&heca_state->root_kobj);
         return -ENOMEM;
@@ -170,7 +163,6 @@ err_root:
 static void cleanup_heca_module_state_ksets(
                 struct heca_module_state *heca_state)
 {
-        kset_unregister(heca_state->transports_kset);
         kset_unregister(heca_state->hspaces_kset);
         kobject_del(&heca_state->root_kobj);
 }

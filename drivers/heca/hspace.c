@@ -18,6 +18,46 @@
 
 #define to_hspace(s)            container_of(s, struct heca_space, kobj)
 #define to_hspace_attr(sa)      container_of(sa, struct hspace_attr, attr)
+/*
+ * Creator / destructor 
+ */
+
+
+static void remove_hspace(struct heca_space *hspace)
+{
+        struct heca_process *hproc;
+        struct heca_module_state *heca_state = get_heca_module_state();
+        struct list_head *pos, *n;
+
+        BUG_ON(!hspace);
+
+
+        list_for_each_safe (pos, n, &hspace->hprocs_list) {
+                hproc = list_entry(pos, struct heca_process, hproc_ptr);
+                remove_hproc(hspace->hspace_id, hproc->hproc_id);
+        }
+
+        mutex_lock(&heca_state->heca_state_mutex);
+        list_del(&hspace->hspace_ptr);
+        radix_tree_delete(&heca_state->hspaces_tree_root,
+                        (unsigned long) hspace->hspace_id);
+        mutex_unlock(&heca_state->heca_state_mutex);
+        synchronize_rcu();
+
+        mutex_lock(&heca_state->heca_state_mutex);
+        kfree(hspace);
+        mutex_unlock(&heca_state->heca_state_mutex);
+
+}
+
+void release_hspace(struct heca_space *hspace)
+{
+        /* we remove sysfs entry */
+        kobject_del(&hspace->kobj);
+        /* move refcount to zero and free it */
+        kobject_put(&hspace->kobj);
+}
+
 
 /*
  * Heca Space  Kobject
@@ -31,7 +71,8 @@ struct hspace_attr {
 
 static void kobj_hspace_release(struct kobject *k)
 {
-        heca_printk(KERN_DEBUG, "Releasing kobject %p", k);
+        struct heca_space *hspace = to_hspace(k);
+        remove_hspace(hspace);
 }
 
 static ssize_t heca_space_show(struct kobject *k, struct attribute *a,
@@ -70,15 +111,13 @@ int deregister_hspace(__u32 hspace_id)
         struct heca_space *hspace;
         struct list_head *curr, *next;
 
-        heca_printk(KERN_DEBUG "<enter> hspace_id=%d", hspace_id);
         list_for_each_safe (curr, next, &heca_state->hspaces_list) {
                 hspace = list_entry(curr, struct heca_space, hspace_ptr);
                 if (hspace->hspace_id == hspace_id)
-                        remove_hspace(hspace);
+                        release_hspace(hspace);
         }
 
         destroy_hcm_listener(heca_state);
-        heca_printk(KERN_DEBUG "<exit> %d", ret);
         return ret;
 }
 
@@ -87,24 +126,17 @@ int register_hspace(struct hecaioc_hspace *hspace_info)
         struct heca_module_state *heca_state = get_heca_module_state();
         int rc;
 
-        heca_printk(KERN_DEBUG "<enter>");
-
-        if ((rc = create_hcm_listener(heca_state,
-                                        hspace_info->local.sin_addr.s_addr,
-                                        hspace_info->local.sin_port))) {
-                heca_printk(KERN_ERR "create_hcm %d", rc);
-                goto done;
-        }
-
-        if ((rc = create_hspace(hspace_info->hspace_id))) {
-                heca_printk(KERN_ERR "create_hspace %d", rc);
-                goto done;
-        }
-
-done:
+        rc = create_hcm_listener(heca_state, hspace_info->local.sin_addr.s_addr,
+                        hspace_info->local.sin_port);
         if (rc)
-                deregister_hspace(hspace_info->hspace_id);
-        heca_printk(KERN_DEBUG "<exit> %d", rc);
+                return rc;
+
+        rc = create_hspace(hspace_info->hspace_id);
+        if (rc) {
+                heca_printk(KERN_ERR "create_hspace %d failed", rc);
+                /* FIXME: add the hcm release here*/
+        }
+
         return rc;
 }
 
@@ -135,34 +167,6 @@ out:
         return hspace;
 }
 
-void remove_hspace(struct heca_space *hspace)
-{
-        struct heca_process *hproc;
-        struct heca_module_state *heca_state = get_heca_module_state();
-        struct list_head *pos, *n;
-
-        BUG_ON(!hspace);
-
-        heca_printk(KERN_DEBUG "<enter> hspace=%d", hspace->hspace_id);
-
-        list_for_each_safe (pos, n, &hspace->hprocs_list) {
-                hproc = list_entry(pos, struct heca_process, hproc_ptr);
-                remove_hproc(hspace->hspace_id, hproc->hproc_id);
-        }
-
-        mutex_lock(&heca_state->heca_state_mutex);
-        list_del(&hspace->hspace_ptr);
-        radix_tree_delete(&heca_state->hspaces_tree_root,
-                        (unsigned long) hspace->hspace_id);
-        mutex_unlock(&heca_state->heca_state_mutex);
-        synchronize_rcu();
-
-        mutex_lock(&heca_state->heca_state_mutex);
-        kfree(hspace);
-        mutex_unlock(&heca_state->heca_state_mutex);
-
-        heca_printk(KERN_DEBUG "<exit>");
-}
 
 
 int create_hspace(__u32 hspace_id)
@@ -191,7 +195,6 @@ int create_hspace(__u32 hspace_id)
         INIT_RADIX_TREE(&new_hspace->hprocs_mm_tree_root,
                         GFP_KERNEL & ~__GFP_WAIT);
         INIT_LIST_HEAD(&new_hspace->hprocs_list);
-        new_hspace->nb_local_hprocs = 0;
 
         while (1) {
                 r = radix_tree_preload(GFP_HIGHUSER_MOVABLE & GFP_KERNEL);
@@ -220,6 +223,13 @@ int create_hspace(__u32 hspace_id)
         }
 
         list_add(&new_hspace->hspace_ptr, &heca_state->hspaces_list);
+        new_hspace->kobj.kset = heca_state->hspaces_kset;
+        r = kobject_init_and_add(&new_hspace->kobj, &ktype_hspace, NULL,
+                        HSPACE_KOBJECT, hspace_id);
+        if(r){
+                kobject_put(&new_hspace->kobj);
+                return r;
+        }
         heca_printk("registered hspace %p, hspace_id : %u, res: %d",
                         new_hspace, hspace_id, r);
         return r;
