@@ -277,12 +277,17 @@ int destroy_hcm_listener(struct heca_module_state *heca_state)
 
         if (!hcm)
                 goto done;
+        /* FIXME: We need to return here and change the destroy to release hcm
+         * -> use kobject
+         */
 
         if (!list_empty(&heca_state->hspaces_list)) {
                 heca_printk(KERN_INFO "can't delete hcm - hspaces exist");
                 rc = -EBUSY;
         }
-
+        /* FIXME: we shoul not to disconnect if we still have Hspace floating using the
+         * hcm
+         */
         hcm_disconnect(hcm);
 
         if (!hcm->cm_id)
