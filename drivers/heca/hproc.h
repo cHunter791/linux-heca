@@ -75,7 +75,7 @@ void teardown_hproc_byid(u32, u32);
 void teardown_hproc(struct heca_process *);
 struct heca_process *find_any_hproc(struct heca_space *,
                 struct heca_process_list);
-struct heca_process *find_local_hproc_from_list(struct heca_space *);
+struct heca_process *find_get_local_hproc_from_list(struct heca_space *);
 int is_hproc_local(struct heca_process *);
 struct heca_process * __must_check get_hproc(struct heca_process *);
 struct heca_process * __must_check get_hproc_unless_zero(struct heca_process *);

@@ -7,9 +7,11 @@
 
 #include <linux/types.h>
 #include <linux/rbtree.h>
+#include <linux/kobject.h>
 
 #include "ioctl.h"
 #include "hproc.h"
+
 
 struct heca_memory_region {
         unsigned long addr;
@@ -18,6 +20,7 @@ struct heca_memory_region {
         u32 hmr_id;
         u32 flags;
         struct rb_node rb_node;
+        struct kobject kobj;
 };
 
 
@@ -25,6 +28,7 @@ struct heca_memory_region *find_heca_mr(struct heca_process *, u32);
 struct heca_memory_region *search_heca_mr_by_addr(struct heca_process *,
                 unsigned long);
 int create_heca_mr(struct hecaioc_hmr *udata);
+void teardown_hmr(struct heca_memory_region *);
 
 
 #endif /* MR_H_ */

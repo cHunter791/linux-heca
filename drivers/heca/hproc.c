@@ -309,7 +309,6 @@ int create_hproc(struct hecaioc_hproc *hproc_info)
         if(r){
                 kobject_put(&new_hproc->kobj);
         }
-        get_hproc(new_hproc);
 
 out:
         mutex_unlock(&hspace->hspace_mutex);
@@ -481,11 +480,7 @@ static void destroy_hproc_mrs(struct heca_process *hproc)
                 mr = rb_entry(node, struct heca_memory_region, rb_node);
                 rb_erase(&mr->rb_node, root);
                 write_sequnlock(&hproc->hmr_seq_lock);
-                heca_printk(KERN_INFO "removing hspace_id: %u hproc_id: %u, mr_id: %u",
-                                hproc->hspace->hspace_id, hproc->hproc_id,
-                                mr->hmr_id);
-                synchronize_rcu();
-                kfree(mr);
+                teardown_hmr(mr);
         } while(1);
 }
 
@@ -596,7 +591,7 @@ struct heca_process *find_any_hproc(struct heca_space *hspace,
 
 
 
-struct heca_process *find_local_hproc_from_list(
+struct heca_process *find_get_local_hproc_from_list(
                 struct heca_space *hspace)
 {
         struct heca_process *tmp_hproc;
