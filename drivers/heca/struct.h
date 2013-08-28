@@ -27,6 +27,8 @@
 #include <linux/llist.h>
 #include <linux/heca.h>
 
+#include "transport.h"
+
 #define RDMA_PAGE_SIZE      PAGE_SIZE
 
 /*
@@ -127,24 +129,6 @@ struct heca_space_kobjects {
         struct kobject *hspace_glob_kobject;
         struct kobject *rdma_kobject;
         struct kobject *domains_kobject;
-};
-
-struct heca_connections_manager {
-        int node_ip;
-
-        struct rdma_cm_id *cm_id;
-        struct ib_device *dev;
-        struct ib_pd *pd;
-        struct ib_mr *mr;
-
-        struct ib_cq *listen_cq;
-
-        struct mutex hcm_mutex;
-
-        struct rb_root connections_rb_tree_root;
-        seqlock_t connections_lock;
-
-        struct sockaddr_in sin;
 };
 
 struct map_dma {
