@@ -63,7 +63,6 @@ struct heca_process {
         struct llist_head deferred_gups;
         struct work_struct deferred_gup_work;
 
-        atomic_t refs;
 };
 
 
@@ -72,13 +71,15 @@ inline struct heca_process *find_local_hproc_in_hspace(struct heca_space *,
                 struct mm_struct *);
 inline struct heca_process *find_local_hproc_from_mm(struct mm_struct *);
 int create_hproc(struct hecaioc_hproc *);
-inline void release_hproc(struct heca_process *);
 void teardown_hproc_byid(u32, u32);
 void teardown_hproc(struct heca_process *);
 struct heca_process *find_any_hproc(struct heca_space *,
                 struct heca_process_list);
 struct heca_process *find_local_hproc_from_list(struct heca_space *);
 int is_hproc_local(struct heca_process *);
+struct heca_process * __must_check get_hproc(struct heca_process *);
+struct heca_process * __must_check get_hproc_unless_zero(struct heca_process *);
+void put_hproc(struct heca_process*);
 
 
 #endif /* HPROC_H_ */

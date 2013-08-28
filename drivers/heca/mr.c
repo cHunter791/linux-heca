@@ -194,7 +194,7 @@ int create_heca_mr(struct hecaioc_hmr *udata)
                         mr->flags |= MR_LOCAL;
                 }
 
-                release_hproc(owner);
+                put_hproc(owner);
         }
 
         if (udata->flags & UD_COPY_ON_ACCESS) {
@@ -218,7 +218,7 @@ out_free:
         kfree(mr);
 out:
         if (local_hproc)
-                release_hproc(local_hproc);
+                put_hproc(local_hproc);
         heca_printk(KERN_INFO "id [%d] addr [0x%lx] sz [0x%lx] --> ret %d",
                         udata->hmr_id, udata->addr, udata->sz, ret);
         return ret;
