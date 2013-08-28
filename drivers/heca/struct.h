@@ -192,7 +192,7 @@ struct heca_space_page_pool {
 };
 
 struct heca_connection {
-        struct heca_connections_manager *hcm;
+        struct heca_transport_manager *htm;
         /* not 100% sure of this atomic regarding barrier*/
         atomic_t alive;
 
@@ -387,7 +387,7 @@ struct heca_deferred_gup {
 
 
 struct heca_module_state {
-        struct heca_connections_manager *hcm;
+        struct heca_transport_manager *htm;
         struct mutex heca_state_mutex;
         spinlock_t radix_lock;
         struct radix_tree_root hspaces_tree_root;

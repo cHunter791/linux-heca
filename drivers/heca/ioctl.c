@@ -111,7 +111,7 @@ void destroy_heca_module_state(void)
                 remove_hspace(hspace);
         }
 
-        destroy_hcm_listener(heca_state);
+        destroy_htm_listener(heca_state);
         mutex_destroy(&heca_state->heca_state_mutex);
         destroy_workqueue(heca_state->heca_tx_wq);
         destroy_workqueue(heca_state->heca_rx_wq);
@@ -133,7 +133,7 @@ static int deregister_hspace(__u32 hspace_id)
                         remove_hspace(hspace);
         }
 
-        destroy_hcm_listener(heca_state);
+        destroy_htm_listener(heca_state);
         heca_printk(KERN_DEBUG "<exit> %d", ret);
         return ret;
 }
@@ -145,10 +145,10 @@ static int register_hspace(struct hecaioc_hspace *hspace_info)
 
         heca_printk(KERN_DEBUG "<enter>");
 
-        if ((rc = create_hcm_listener(heca_state,
+        if ((rc = create_htm_listener(heca_state,
                                         hspace_info->local.sin_addr.s_addr,
                                         hspace_info->local.sin_port))) {
-                heca_printk(KERN_ERR "create_hcm %d", rc);
+                heca_printk(KERN_ERR "create_htm %d", rc);
                 goto done;
         }
 
@@ -320,7 +320,7 @@ static int heca_init(void)
         heca_zero_pfn_init();
         heca_sysfs_setup(heca_state);
         rc = misc_register(&heca_misc);
-        init_hcm();
+        init_htm();
         BUG_ON(heca_hook_register(&my_heca_hook));
 
         heca_printk(KERN_DEBUG "<exit> %d", rc);
@@ -334,7 +334,7 @@ static void heca_exit(void)
 
         heca_printk(KERN_DEBUG "<enter>");
         BUG_ON(heca_hook_unregister());
-        fini_hcm();
+        fini_htm();
         misc_deregister(&heca_misc);
         heca_sysfs_cleanup(heca_state);
         heca_zero_pfn_exit();

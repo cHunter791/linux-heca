@@ -274,9 +274,9 @@ static ssize_t instance_hspace_server_show(struct heca_space *hspace,
         struct heca_module_state *heca_state = get_heca_module_state();
 
         BUG_ON(!heca_state);
-        BUG_ON(!heca_state->hcm);
+        BUG_ON(!heca_state->htm);
 
-        sockaddr_ntoa(&heca_state->hcm->sin, s, sizeof s);
+        sockaddr_ntoa(&heca_state->htm->sin, s, sizeof s);
         return sprintf(data, "%s\n", s);
 }
 

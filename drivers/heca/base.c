@@ -21,15 +21,15 @@
  */
 struct heca_connection *search_rb_conn(int node_ip)
 {
-        struct heca_connections_manager *hcm = get_heca_module_state()->hcm;
+        struct heca_transport_manager *htm = get_heca_module_state()->htm;
         struct rb_root *root;
         struct rb_node *node;
         struct heca_connection *this = 0;
         unsigned long seq;
 
         do {
-                seq = read_seqbegin(&hcm->connections_lock);
-                root = &hcm->connections_rb_tree_root;
+                seq = read_seqbegin(&htm->connections_lock);
+                root = &htm->connections_rb_tree_root;
                 for (node = root->rb_node; node; this = 0) {
                         this = rb_entry(node, struct heca_connection, rb_node);
 
@@ -40,20 +40,20 @@ struct heca_connection *search_rb_conn(int node_ip)
                         else
                                 break;
                 }
-        } while (read_seqretry(&hcm->connections_lock, seq));
+        } while (read_seqretry(&htm->connections_lock, seq));
 
         return this;
 }
 
 void insert_rb_conn(struct heca_connection *conn)
 {
-        struct heca_connections_manager *hcm = get_heca_module_state()->hcm;
+        struct heca_transport_manager *htm = get_heca_module_state()->htm;
         struct rb_root *root;
         struct rb_node **new, *parent = NULL;
         struct heca_connection *this;
 
-        write_seqlock(&hcm->connections_lock);
-        root = &hcm->connections_rb_tree_root;
+        write_seqlock(&htm->connections_lock);
+        root = &htm->connections_rb_tree_root;
         new = &root->rb_node;
         while (*new) {
                 this = rb_entry(*new, struct heca_connection, rb_node);
@@ -65,16 +65,16 @@ void insert_rb_conn(struct heca_connection *conn)
         }
         rb_link_node(&conn->rb_node, parent, new);
         rb_insert_color(&conn->rb_node, root);
-        write_sequnlock(&hcm->connections_lock);
+        write_sequnlock(&htm->connections_lock);
 }
 
 void erase_rb_conn(struct heca_connection *conn)
 {
-        struct heca_connections_manager *hcm = get_heca_module_state()->hcm;
+        struct heca_transport_manager *htm = get_heca_module_state()->htm;
 
-        write_seqlock(&hcm->connections_lock);
-        rb_erase(&conn->rb_node, &hcm->connections_rb_tree_root);
-        write_sequnlock(&hcm->connections_lock);
+        write_seqlock(&htm->connections_lock);
+        rb_erase(&conn->rb_node, &htm->connections_rb_tree_root);
+        write_sequnlock(&htm->connections_lock);
 }
 
 /*
@@ -671,8 +671,8 @@ void remove_hproc(u32 hspace_id, u32 hproc_id)
                 struct rb_root *root;
                 struct rb_node *node;
 
-                if (heca_state->hcm) {
-                        root = &heca_state->hcm->connections_rb_tree_root;
+                if (heca_state->htm) {
+                        root = &heca_state->htm->connections_rb_tree_root;
                         for (node = rb_first(root);
                                         node; node = rb_next(node)) {
                                 struct heca_connection *ele;
