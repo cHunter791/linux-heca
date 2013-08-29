@@ -636,7 +636,7 @@ void heca_invalidate_readers(struct heca_process *hproc, unsigned long addr,
                                 if (likely(mr))
                                         heca_claim_page(hproc, remote_hproc, mr,
                                                         addr, NULL, 0);
-                                put_hproc(remote_hproc);
+                                release_hproc(remote_hproc);
                         }
                 }
 
@@ -848,7 +848,7 @@ retry:
         maintainer = find_hproc(hproc->hspace, maintainer_id);
         if (likely(maintainer)) {
                 descriptor = maintainer->descriptor;
-                put_hproc(maintainer);
+                release_hproc(maintainer);
         } else {
                 descriptor = mr->descriptor;
         }
@@ -936,7 +936,7 @@ int push_back_if_remote_heca_page(struct page *page)
                 /* lookup a remote mr owner, to push the page to */
                 mr = search_heca_mr_by_addr(hproc, address);
                 if (!mr || mr->flags & (MR_LOCAL | MR_COPY_ON_ACCESS)) {
-                        put_hproc(hproc);
+                        release_hproc(hproc);
                         continue;
                 }
                 /* we need to unlock the VMA before doing and Heca operation
@@ -955,7 +955,7 @@ int push_back_if_remote_heca_page(struct page *page)
                         unlock_page(page);
                 }
 
-                put_hproc(hproc);
+                release_hproc(hproc);
                 ret = 1;
                 goto out;
         }

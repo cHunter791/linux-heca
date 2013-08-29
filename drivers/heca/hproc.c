@@ -23,35 +23,7 @@
 #define to_hproc(p)             container_of(p, struct heca_process, kobj)
 #define to_hproc_attr(pa)       container_of(pa, struct hproc_attr, attr)
 
-/*
- * Refcounting macro
- */
 
-struct heca_process * __must_check get_hproc(struct heca_process * hproc) {
-
-        if(hproc){
-                struct kobject *kobj = &hproc->kobj;
-                if(kobject_get(kobj))
-                        return hproc;
-        }
-        return NULL;
-}
-
-struct heca_process * __must_check get_hproc_unless_zero(
-                struct heca_process * hproc) {
-
-        if(hproc){
-                if(kref_get_unless_zero(&hproc->kobj.kref))
-                        return hproc;
-        }
-        return NULL;
-}
-
-void put_hproc(struct heca_process * hproc) {
-
-        if(hproc)
-                kobject_put(&hproc->kobj);
-}
 
 /*
  * Heca proc  Kobject
@@ -66,9 +38,7 @@ struct hproc_attr {
 static void kobj_hproc_release(struct kobject *k)
 {
         struct heca_process *hproc = to_hproc(k);
-        trace_heca_free_hproc(hproc->hproc_id);
-        synchronize_rcu();
-        kfree(hproc);
+        release_hproc(hproc);
 }
 
 static ssize_t hproc_show(struct kobject *k, struct attribute *a,
@@ -103,6 +73,21 @@ inline int is_hproc_local(struct heca_process *hproc)
         return !!hproc->mm;
 }
 
+static inline int grab_hproc(struct heca_process *hproc)
+{
+#if !defined(CONFIG_SMP) && defined(CONFIG_TREE_RCU)
+# ifdef CONFIG_PREEMPT_COUNT
+        BUG_ON(!in_atomic());
+# endif
+        BUG_ON(atomic_read(&hproc->refs) == 0);
+        atomic_inc(&hproc->refs);
+#else
+        if (!atomic_inc_not_zero(&hproc->refs))
+                return -1;
+#endif
+        return 0;
+}
+
 static struct heca_process *_find_hproc_in_tree(
                 struct radix_tree_root *root, unsigned long hproc_id)
 {
@@ -123,7 +108,7 @@ repeat:
                                 goto repeat;
                 }
 
-                if (get_hproc_unless_zero(hproc))
+                if (grab_hproc(hproc))
                         goto repeat;
 
         }
@@ -250,6 +235,7 @@ int create_hproc(struct hecaioc_hproc *hproc_info)
         new_hproc->is_local = hproc_info->is_local;
         new_hproc->pid = hproc_info->pid;
         new_hproc->hspace = hspace;
+        atomic_set(&new_hproc->refs, 2);
 
         /* register local hproc */
         if (hproc_info->is_local) {
@@ -309,12 +295,12 @@ int create_hproc(struct hecaioc_hproc *hproc_info)
         if(r){
                 kobject_put(&new_hproc->kobj);
         }
-        get_hproc(new_hproc);
+        grab_hproc(new_hproc);
 
 out:
         mutex_unlock(&hspace->hspace_mutex);
         if (found_hproc)
-                put_hproc(found_hproc);
+                release_hproc(found_hproc);
 
         if (r) {
                 kfree(new_hproc);
@@ -340,6 +326,15 @@ no_hspace:
         return r;
 }
 
+inline void release_hproc(struct heca_process *hproc)
+{
+        atomic_dec(&hproc->refs);
+        if (atomic_cmpxchg(&hproc->refs, 1, 0) == 1) {
+                trace_heca_free_hproc(hproc->hproc_id);
+                synchronize_rcu();
+                kfree(hproc);
+        }
+}
 
 /*
  * We dec page's refcount for every missing remote response (it would have
@@ -376,7 +371,7 @@ surrogate:
         write_sequnlock(&hproc->push_cache_lock);
 }
 
-static void put_hproc_push_elements(struct heca_process *hproc)
+static void release_hproc_push_elements(struct heca_process *hproc)
 {
         struct rb_node *node;
 
@@ -405,7 +400,7 @@ static void put_hproc_push_elements(struct heca_process *hproc)
  * therefore we can catch them and surrogate for them by iterating the tx
  * buffer.
  */
-static void put_hproc_tx_elements(struct heca_process *hproc,
+static void release_hproc_tx_elements(struct heca_process *hproc,
                 struct heca_connection *conn)
 {
         struct tx_buffer_element *tx_buf;
@@ -443,7 +438,7 @@ static void put_hproc_tx_elements(struct heca_process *hproc,
         }
 }
 
-static void put_hproc_queued_requests(struct heca_process *hproc,
+static void release_hproc_queued_requests(struct heca_process *hproc,
                 struct tx_buffer *tx)
 {
         struct heca_request *req, *n;
@@ -552,19 +547,19 @@ static void remove_hproc(struct heca_process *hproc){
                                                 struct heca_connection,
                                                 rb_node);
                                 BUG_ON(!conn);
-                                put_hproc_queued_requests(hproc,
+                                release_hproc_queued_requests(hproc,
                                                 &conn->tx_buffer);
-                                put_hproc_tx_elements(hproc, conn);
+                                release_hproc_tx_elements(hproc, conn);
                         }
                 }
-                put_hproc_push_elements(hproc);
+                release_hproc_push_elements(hproc);
                 destroy_hproc_mrs(hproc);
         } else if (hproc->connection) {
                 struct heca_process *local_hproc;
 
-                put_hproc_queued_requests(hproc,
+                release_hproc_queued_requests(hproc,
                                 &hproc->connection->tx_buffer);
-                put_hproc_tx_elements(hproc, hproc->connection);
+                release_hproc_tx_elements(hproc, hproc->connection);
 
                 /* potentially very expensive way to do this */
                 list_for_each_entry (local_hproc, &hproc->hspace->hprocs_list,
@@ -574,6 +569,8 @@ static void remove_hproc(struct heca_process *hproc){
                 }
         }
 
+        atomic_dec(&hproc->refs);
+        release_hproc(hproc);
 
         mutex_unlock(&hspace->hspace_mutex);
 }
@@ -606,7 +603,7 @@ struct heca_process *find_local_hproc_from_list(
                         continue;
                 heca_printk(KERN_DEBUG "hspace %d local hproc is %d",
                                 hspace->hspace_id, tmp_hproc->hproc_id);
-                tmp_hproc = get_hproc_unless_zero(tmp_hproc);
+                grab_hproc(tmp_hproc);
                 return tmp_hproc;
         }
         return NULL;

@@ -1695,7 +1695,7 @@ done:
         hproc->connection = conn;
 
 failed:
-        put_hproc(hproc);
+        release_hproc(hproc);
 no_hproc:
         mutex_unlock(&hspace->hspace_mutex);
         heca_printk(KERN_INFO "hspace %d hproc %d hproc_connect ip %pI4: %d",
