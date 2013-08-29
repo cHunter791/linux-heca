@@ -117,7 +117,7 @@ static int send_request_heca_page_pull(struct heca_process *fault_hproc,
                         continue;
 
                 cons[i] = hproc->connection;
-                release_hproc(hproc);
+                hproc_put(hproc);
 
                 tx_elms[i] = try_get_next_empty_tx_ele(cons[i], 1);
                 if (unlikely(!tx_elms[i])) {
@@ -270,7 +270,7 @@ int process_request_query(struct heca_connection *conn,
         r = heca_send_response(conn, MSG_RES_QUERY, msg);
 
 out:
-        release_hproc(hproc);
+        hproc_put(hproc);
 fail:
         return r;
 }
@@ -307,7 +307,7 @@ int process_query_info(struct tx_buffer_element *tx_e)
         r = 0;
 
 out:
-        release_hproc(hproc);
+        hproc_put(hproc);
 fail:
         return r;
 }
@@ -342,7 +342,7 @@ int process_pull_request(struct heca_connection *conn,
         // we get -1 if something bad happened, or >0 if we had dpc or we requested the page
         if (heca_trigger_page_pull(hspace, local_hproc, mr, msg->req_addr) < 0)
                 r = -1;
-        release_hproc(local_hproc);
+        hproc_put(local_hproc);
 
         return r;
 
@@ -393,7 +393,7 @@ int process_page_redirect(struct heca_connection *conn,
          * only wasteful in the worst case
          */
         heca_request_query(hpc->hproc, mr_owner, fault_mr, req_addr, hpc);
-        release_hproc(mr_owner);
+        hproc_put(mr_owner);
 
         if (hpc->redirect_hproc_id)
                 redirect_hproc_id = hpc->redirect_hproc_id;
@@ -407,7 +407,7 @@ int process_page_redirect(struct heca_connection *conn,
                         req_addr + fault_mr->addr, req_addr, hpc->tag);
         ret = heca_request_page(page, remote_hproc, hpc->hproc, fault_mr,
                         req_addr, func, hpc->tag, hpc, NULL);
-        release_hproc(remote_hproc);
+        hproc_put(remote_hproc);
 
 out:
         if (unlikely(ret)) {
@@ -500,9 +500,9 @@ int process_page_claim(struct heca_connection *conn, struct heca_message *msg)
                                         remote_proc->hproc_id);
         }
 
-        release_hproc(remote_proc);
+        hproc_put(remote_proc);
 out_hproc:
-        release_hproc(local_hproc);
+        hproc_put(local_hproc);
 out:
         /*
          * for CLAIM requests, acknowledge if a page was actually unmapped;
@@ -563,7 +563,7 @@ static int heca_retry_claim(struct heca_message *msg, struct page *page)
         BUG_ON(!hpc);
 
         heca_request_query(hproc, owner, mr, msg->req_addr, hpc);
-        release_hproc(owner);
+        hproc_put(owner);
         /*
          * TODO: block here until the query finishes, otherwise issuing
          * another claim is wasteful/useless.
@@ -574,12 +574,12 @@ static int heca_retry_claim(struct heca_message *msg, struct page *page)
                 goto fail;
 
         heca_claim_page(hproc, remote_hproc, mr, msg->req_addr, page, 1);
-        release_hproc(hproc);
+        hproc_put(hproc);
         return 0;
 
 fail:
         if (hproc)
-                release_hproc(hproc);
+                hproc_put(hproc);
         return -EFAULT;
 }
 
@@ -683,8 +683,8 @@ retry:
                         local_hproc->hproc_id, remote_hproc->hproc_id,
                         mr->hmr_id, addr, msg->req_addr, msg->type);
         tx_heca_send(conn, tx_e);
-        release_hproc(local_hproc);
-        release_hproc(remote_hproc);
+        hproc_put(local_hproc);
+        hproc_put(remote_hproc);
         return 0;
 
 no_page:
@@ -711,9 +711,9 @@ fail:
         heca_send_response(conn, MSG_RES_PAGE_FAIL, msg);
 out:
         if (remote_hproc)
-                release_hproc(remote_hproc);
+                hproc_put(remote_hproc);
         if (local_hproc)
-                release_hproc(local_hproc);
+                hproc_put(local_hproc);
 out_keep:
         return -EINVAL;
 }
@@ -780,7 +780,7 @@ int process_page_request_msg(struct heca_connection *conn,
 
         remote_hproc = find_hproc(hspace, msg->dest_id);
         if (unlikely(!remote_hproc)) {
-                release_hproc(local_hproc);
+                hproc_put(local_hproc);
                 goto fail;
         }
 
@@ -812,7 +812,7 @@ int heca_request_page_pull(struct heca_space *hspace,
                 struct heca_process *hproc = find_hproc(hspace, hprocs.ids[i]);
                 int full = heca_request_queue_full(hproc->connection);
 
-                release_hproc(hproc);
+                hproc_put(hproc);
                 if (full)
                         return -ENOMEM;
         }
