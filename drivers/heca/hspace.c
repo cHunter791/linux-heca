@@ -15,6 +15,7 @@
 
 
 #define HSPACE_KOBJECT          "%u"
+#define HPROCS_KSET             "hprocs"
 
 #define to_hspace(s)            container_of(s, struct heca_space, kobj)
 #define to_hspace_attr(sa)      container_of(sa, struct hspace_attr, attr)
@@ -22,20 +23,23 @@
  * Creator / destructor 
  */
 
-
-static void remove_hspace(struct heca_space *hspace)
+static void teardown_hprocs(struct heca_space *hspace)
 {
         struct heca_process *hproc;
-        struct heca_module_state *heca_state = get_heca_module_state();
         struct list_head *pos, *n;
-
-        BUG_ON(!hspace);
-
 
         list_for_each_safe (pos, n, &hspace->hprocs_list) {
                 hproc = list_entry(pos, struct heca_process, hproc_ptr);
                 teardown_hproc(hproc);
         }
+
+        kset_unregister(hspace->hprocs_kset);
+}
+static void remove_hspace(struct heca_space *hspace)
+{
+        struct heca_module_state *heca_state = get_heca_module_state();
+
+        BUG_ON(!hspace);
 
         mutex_lock(&heca_state->heca_state_mutex);
         list_del(&hspace->hspace_ptr);
@@ -53,6 +57,7 @@ static void remove_hspace(struct heca_space *hspace)
 
 void teardown_hspace(struct heca_space *hspace)
 {
+        teardown_hprocs(hspace);
         /* we remove sysfs entry */
         kobject_del(&hspace->kobj);
         /* move refcount to zero and free it */
@@ -227,10 +232,12 @@ int create_hspace(__u32 hspace_id)
         new_hspace->kobj.kset = heca_state->hspaces_kset;
         r = kobject_init_and_add(&new_hspace->kobj, &ktype_hspace, NULL,
                         HSPACE_KOBJECT, hspace_id);
-        if(r){
-                kobject_put(&new_hspace->kobj);
-                return r;
-        }
+        if(r)
+                goto kobj_fail;
+        new_hspace->hprocs_kset = kset_create_and_add(HPROCS_KSET, NULL,
+                        &new_hspace->kobj);
+        if(!heca_state->hspaces_kset)
+                goto kset_fail;
         heca_printk("registered hspace %p, hspace_id : %u, res: %d",
                         new_hspace, hspace_id, r);
         return r;
@@ -238,4 +245,11 @@ int create_hspace(__u32 hspace_id)
 failed:
         kfree(new_hspace);
         return r;
+kset_fail:
+        kobject_del(&new_hspace->kobj);
+kobj_fail:
+        kobject_put(&new_hspace->kobj);
+        return r;
+
+
 }

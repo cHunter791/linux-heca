@@ -36,7 +36,7 @@
  */
 
 #define to_hms(s)               container_of(s, struct heca_module_state, \
-                                                root_kobj)
+                root_kobj)
 #define to_hms_attr(sa)         container_of(sa, struct hms_attr, attr)
 
 /*
@@ -54,6 +54,36 @@ MODULE_PARM_DESC(debug, "Debug level (0 = disable)");
 
 static struct heca_module_state *heca_state;
 
+
+/*
+ * Heca Module file operations 
+ */
+
+static struct file_operations heca_fops = {
+        .owner = THIS_MODULE,
+        .unlocked_ioctl = heca_ioctl,
+        .llseek = noop_llseek,
+};
+
+/*
+ * Heca Module life Cycle 
+ */
+
+static struct miscdevice heca_misc = {
+        MISC_DYNAMIC_MINOR,
+        HECA_NAME_MINOR,
+        &heca_fops,
+};
+
+const struct heca_hook_struct my_heca_hook = {
+        .name = HECA_NAME,
+        .fetch_page = heca_do_page_fault,
+        .pushback_page = push_back_if_remote_heca_page,
+        .is_congested = heca_is_congested,
+        .write_fault = heca_write_fault,
+        .attach_task = heca_attach_task,
+        .detach_task = heca_detach_task,
+};
 inline struct heca_module_state *get_heca_module_state(void)
 {
         return heca_state;
@@ -76,7 +106,7 @@ struct heca_module_state *create_heca_module_state(void)
         return heca_state;
 }
 
-void destroy_heca_module_state(void)
+static void teardown_hspaces(void)
 {
         struct list_head *curr, *next;
         struct heca_space *hspace;
@@ -85,13 +115,14 @@ void destroy_heca_module_state(void)
                 hspace = list_entry(curr, struct heca_space, hspace_ptr);
                 teardown_hspace(hspace);
         }
-
+        kset_unregister(heca_state->hspaces_kset);
+}
+static void destroy_heca_module_state(void)
+{
+        teardown_hspaces();
         destroy_hcm_listener(heca_state);
-        mutex_destroy(&heca_state->heca_state_mutex);
-        destroy_workqueue(heca_state->heca_tx_wq);
-        destroy_workqueue(heca_state->heca_rx_wq);
-        kfree(heca_state);
-        heca_state = NULL;
+        kobject_del(&heca_state->root_kobj);
+        kobject_put(&heca_state->root_kobj);
 }
 
 /*
@@ -106,7 +137,15 @@ struct hms_attr {
 
 static void kobj_hms_release(struct kobject *k)
 {
-        heca_printk(KERN_DEBUG, "Releasing kobject %p", k);
+        BUG_ON(heca_hook_unregister());
+        fini_hcm();
+        misc_deregister(&heca_misc);
+        heca_zero_pfn_exit();
+        mutex_destroy(&heca_state->heca_state_mutex);
+        destroy_workqueue(heca_state->heca_tx_wq);
+        destroy_workqueue(heca_state->heca_rx_wq);
+        kfree(heca_state);
+        heca_state = NULL;
 }
 
 static ssize_t hms_show(struct kobject *k, struct attribute *a,
@@ -160,44 +199,6 @@ err_root:
         return -ENOMEM;
 }
 
-static void cleanup_heca_module_state_ksets(
-                struct heca_module_state *heca_state)
-{
-        kset_unregister(heca_state->hspaces_kset);
-        kobject_del(&heca_state->root_kobj);
-        /* FIXME: we need to do a put and then cleanup the rest */
-}
-
-/*
- * Heca Module file operations 
- */
-
-static struct file_operations heca_fops = {
-        .owner = THIS_MODULE,
-        .unlocked_ioctl = heca_ioctl,
-        .llseek = noop_llseek,
-};
-
-/*
- * Heca Module life Cycle 
- */
-
-static struct miscdevice heca_misc = {
-        MISC_DYNAMIC_MINOR,
-        HECA_NAME_MINOR,
-        &heca_fops,
-};
-
-const struct heca_hook_struct my_heca_hook = {
-        .name = HECA_NAME,
-        .fetch_page = heca_do_page_fault,
-        .pushback_page = push_back_if_remote_heca_page,
-        .is_congested = heca_is_congested,
-        .write_fault = heca_write_fault,
-        .attach_task = heca_attach_task,
-        .detach_task = heca_detach_task,
-};
-
 static int heca_init(void)
 {
         struct heca_module_state *heca_state = create_heca_module_state();
@@ -218,14 +219,7 @@ module_init(heca_init);
 
 static void heca_exit(void)
 {
-        struct heca_module_state *heca_state = get_heca_module_state();
-
         heca_printk(KERN_DEBUG "<enter>");
-        BUG_ON(heca_hook_unregister());
-        fini_hcm();
-        misc_deregister(&heca_misc);
-        cleanup_heca_module_state_ksets(heca_state);
-        heca_zero_pfn_exit();
         destroy_heca_module_state();
         heca_printk(KERN_DEBUG "<exit>");
 }

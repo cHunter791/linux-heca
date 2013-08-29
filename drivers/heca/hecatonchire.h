@@ -32,6 +32,5 @@ struct heca_module_state {
 
 inline struct heca_module_state *get_heca_module_state(void);
 struct heca_module_state *create_heca_module_state(void);
-void destroy_heca_module_state(void);
 
 #endif /* HECATONCHIRE_H_ */

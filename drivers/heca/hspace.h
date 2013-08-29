@@ -26,6 +26,7 @@ struct heca_space {
         struct list_head hspace_ptr;
 
         struct kobject kobj;
+        struct kset *hprocs_kset;
 
 };
 
