@@ -376,7 +376,7 @@ surrogate:
         write_sequnlock(&hproc->push_cache_lock);
 }
 
-static void release_hproc_push_elements(struct heca_process *hproc)
+static void put_hproc_push_elements(struct heca_process *hproc)
 {
         struct rb_node *node;
 
@@ -405,7 +405,7 @@ static void release_hproc_push_elements(struct heca_process *hproc)
  * therefore we can catch them and surrogate for them by iterating the tx
  * buffer.
  */
-static void release_hproc_tx_elements(struct heca_process *hproc,
+static void put_hproc_tx_elements(struct heca_process *hproc,
                 struct heca_connection *conn)
 {
         struct tx_buffer_element *tx_buf;
@@ -443,7 +443,7 @@ static void release_hproc_tx_elements(struct heca_process *hproc,
         }
 }
 
-static void release_hproc_queued_requests(struct heca_process *hproc,
+static void put_hproc_queued_requests(struct heca_process *hproc,
                 struct tx_buffer *tx)
 {
         struct heca_request *req, *n;
@@ -552,19 +552,19 @@ static void remove_hproc(struct heca_process *hproc){
                                                 struct heca_connection,
                                                 rb_node);
                                 BUG_ON(!conn);
-                                release_hproc_queued_requests(hproc,
+                                put_hproc_queued_requests(hproc,
                                                 &conn->tx_buffer);
-                                release_hproc_tx_elements(hproc, conn);
+                                put_hproc_tx_elements(hproc, conn);
                         }
                 }
-                release_hproc_push_elements(hproc);
+                put_hproc_push_elements(hproc);
                 destroy_hproc_mrs(hproc);
         } else if (hproc->connection) {
                 struct heca_process *local_hproc;
 
-                release_hproc_queued_requests(hproc,
+                put_hproc_queued_requests(hproc,
                                 &hproc->connection->tx_buffer);
-                release_hproc_tx_elements(hproc, hproc->connection);
+                put_hproc_tx_elements(hproc, hproc->connection);
 
                 /* potentially very expensive way to do this */
                 list_for_each_entry (local_hproc, &hproc->hspace->hprocs_list,
