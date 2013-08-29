@@ -227,7 +227,7 @@ int create_hproc(struct hecaioc_hproc *hproc_info)
                 heca_printk(KERN_ERR "hproc %d (hspace %d) already exists",
                                 hproc_info->hproc_id, hproc_info->hspace_id);
                 r = -EEXIST;
-                goto out;
+                goto hproc_exist;
         }
 
         /* initial hproc data */
@@ -246,14 +246,14 @@ int create_hproc(struct hecaioc_hproc *hproc_info)
                         heca_printk(KERN_ERR "can't find pid %d",
                                         new_hproc->pid);
                         r = -ESRCH;
-                        goto out;
+                        goto no_mm;
                 }
 
                 found_hproc = find_local_hproc_from_mm(mm);
                 if (found_hproc) {
                         heca_printk(KERN_ERR "Hproc already exists for current process");
                         r = -EEXIST;
-                        goto out;
+                        goto hproc_exist;
                 }
 
                 new_hproc->mm = mm;
@@ -277,10 +277,15 @@ int create_hproc(struct hecaioc_hproc *hproc_info)
                 seqlock_init(&new_hproc->push_cache_lock);
         }
 
+        r = kobject_init_and_add(&new_hproc->kobj, &ktype_hproc, &hspace->kobj,
+                        HPROC_KOBJECT, new_hproc->hproc_id);
+        if(r){
+                goto kobj_err; 
+        }
         /* register hproc by id and mm_struct (must come before hspace_get_descriptor) */
         r = insert_hproc_to_radix_trees(heca_state, hspace, new_hproc);
         if (r)
-                goto out;
+                goto radix_fail;
         list_add(&new_hproc->hproc_ptr, &hspace->hprocs_list);
 
         /* assign descriptor for remote hproc */
@@ -290,23 +295,9 @@ int create_hproc(struct hecaioc_hproc *hproc_info)
                                 hproc_ids);
         }
 
-        r = kobject_init_and_add(&new_hproc->kobj, &ktype_hproc, &hspace->kobj,
-                        HPROC_KOBJECT, new_hproc->hproc_id);
-        if(r){
-                kobject_put(&new_hproc->kobj);
-        }
         grab_hproc(new_hproc);
 
-out:
         mutex_unlock(&hspace->hspace_mutex);
-        if (found_hproc)
-                release_hproc(found_hproc);
-
-        if (r) {
-                kfree(new_hproc);
-                new_hproc = NULL;
-                goto no_hspace;
-        }
 
         if (!hproc_info->is_local) {
                 r = connect_hproc(hproc_info->hspace_id, hproc_info->hproc_id,
@@ -315,15 +306,39 @@ out:
 
                 if (r) {
                         heca_printk(KERN_ERR "connect_hproc failed %d", r);
-                        kfree(new_hproc);
-                        new_hproc = NULL;
+                        goto del_kobject;
                 }
         }
-no_hspace:
         heca_printk(KERN_INFO "hproc %p, res %d, hspace_id %u, hproc_id: %u --> ret %d",
                         new_hproc, r, hproc_info->hspace_id,
                         hproc_info->hproc_id, r);
         return r;
+
+
+hproc_exist:
+        mutex_unlock(&hspace->hspace_mutex);
+        release_hproc(found_hproc);
+        kfree(new_hproc);
+        new_hproc = NULL;
+        return r;
+no_mm:
+        mutex_unlock(&hspace->hspace_mutex);
+        kfree(new_hproc);
+        new_hproc = NULL;
+        return r;
+radix_fail:
+kobj_err:
+        mutex_unlock(&hspace->hspace_mutex);
+        kobject_put(&new_hproc->kobj);
+        return r;
+del_kobject:
+        mutex_unlock(&hspace->hspace_mutex);
+        teardown_hproc(new_hproc);
+no_hspace :
+        return r;
+
+
+
 }
 
 inline void release_hproc(struct heca_process *hproc)
