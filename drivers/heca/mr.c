@@ -13,54 +13,10 @@
 
 #include "ops.h"
 
-#define HMR_KOBJECT              "%u"
+#define MR_KOBJECT              "%u"
 
-#define to_hmr(m)                container_of(m, struct heca_memory_region, kobj)
-#define to_hmr_attr(ma)          container_of(ma, struct hmr_attr, attr)
-
-/*
- * Heca proc  Kobject
- */
-
-struct hmr_attr {
-        struct attribute attr;
-        ssize_t(*show)(struct heca_memory_region *, char *);
-        ssize_t(*store)(struct heca_memory_region *, char *, size_t);
-};
-
-static void kobj_hmr_release(struct kobject *k)
-{
-        struct heca_memory_region *hmr = to_hmr(k);
-
-        heca_printk(KERN_INFO "removing  mr_id: %u", hmr->hmr_id);
-        synchronize_rcu();
-        kfree(hmr);
-}
-
-static ssize_t hmr_show(struct kobject *k, struct attribute *a,
-                char *buffer)
-{
-        struct heca_memory_region *hmr = to_hmr(k);
-        struct hmr_attr *hmr_attr = to_hmr_attr(a);
-        if (hmr_attr->show)
-                return hmr_attr->show(hmr,buffer);
-        return 0;
-}
-
-static struct hmr_attr *hmr_attr[] = {
-        NULL
-};
-
-static struct sysfs_ops hmr_ops = {
-        .show = hmr_show,
-};
-
-static struct kobj_type ktype_hmr = {
-        .release = kobj_hmr_release,
-        .sysfs_ops = &hmr_ops,
-        .default_attrs = (struct attribute **) hmr_attr,
-};
-
+#define to_mr(m)                container_of(m, struct heca_memory_region, kobj)
+#define to_mr_attr(ma)          container_of(ma, struct hmr_attr, attr)
 
 struct heca_memory_region *find_heca_mr(struct heca_process *hproc,
                 u32 id)
@@ -181,7 +137,7 @@ int create_heca_mr(struct hecaioc_hmr *udata)
                 goto out;
         }
 
-        local_hproc = find_get_local_hproc_from_list(hspace);
+        local_hproc = find_local_hproc_from_list(hspace);
         if (!local_hproc) {
                 heca_printk(KERN_ERR "can't find local hproc for hspace %d",
                                 udata->hspace_id);
@@ -250,15 +206,8 @@ int create_heca_mr(struct hecaioc_hmr *udata)
         }
 
         if (!(mr->flags & MR_LOCAL) && (udata->flags & UD_AUTO_UNMAP)) {
-                /*FIXME : handle failed unmap range */
                 ret = unmap_range(hspace, mr->descriptor, local_hproc->pid,
                                 mr->addr, mr->sz);
-        }
-        ret = kobject_init_and_add(&mr->kobj, &ktype_hmr, &local_hproc->kobj,
-                        HMR_KOBJECT, mr->hmr_id);
-        if(ret){
-                rb_erase(&mr->rb_node, &local_hproc->hmr_tree_root);
-                kobject_put(&mr->kobj);
         }
 
         goto out;
@@ -274,12 +223,3 @@ out:
                         udata->hmr_id, udata->addr, udata->sz, ret);
         return ret;
 }
-
-void teardown_hmr(struct heca_memory_region *hmr)
-{
-        /* we remove the kobject entry */
-        kobject_del(&hmr->kobj);
-        /* final put for releasing the object*/
-        kobject_put(&hmr->kobj);
-}
-
