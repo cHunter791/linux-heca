@@ -112,7 +112,7 @@ int unmap_ps(struct hecaioc_ps *udata)
 
 out:
         if (local_hproc)
-                release_hproc(local_hproc);
+                hproc_put(local_hproc);
         return r;
 }
 

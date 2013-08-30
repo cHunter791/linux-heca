@@ -39,7 +39,7 @@ static int ioctl_hproc(int ioctl, void __user *argp)
         case HECAIOC_HPROC_ADD:
                 return create_hproc(&hproc_info);
         case HECAIOC_HPROC_RM:
-                remove_hproc(hproc_info.hspace_id, hproc_info.hproc_id);
+                teardown_hproc_byid(hproc_info.hspace_id, hproc_info.hproc_id);
                 return 0;
         }
         return -EINVAL;
