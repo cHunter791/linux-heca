@@ -19,12 +19,13 @@
 #include "conn.h"
 
 #define HPROC_KOBJECT           "%u"
+#define HMRS_KSET               "memory_regions"
 
 #define to_hproc(p)             container_of(p, struct heca_process, kobj)
 #define to_hproc_attr(pa)       container_of(pa, struct hproc_attr, attr)
 
 /*
- * Hproc refcount 
+ * Hproc refcount
  */
 
 struct heca_process *hproc_get(struct heca_process *hproc)
@@ -294,6 +295,10 @@ int create_hproc(struct hecaioc_hproc *hproc_info)
         if(r){
                 goto kobj_err;
         }
+        new_hproc->hmrs_kset = kset_create_and_add(HMRS_KSET, NULL,
+                        &new_hproc->kobj);
+        if(!new_hproc->hmrs_kset)
+                goto kset_fail;
         /* register hproc by id and mm_struct (must come before hspace_get_descriptor) */
         r = insert_hproc_to_radix_trees(heca_state, hspace, new_hproc);
         if (r)
@@ -338,6 +343,8 @@ no_mm:
         new_hproc = NULL;
         return r;
 radix_fail:
+kset_fail:
+        kobject_del(&new_hproc->kobj);
 kobj_err:
         mutex_unlock(&hspace->hspace_mutex);
         kobject_put(&new_hproc->kobj);
@@ -498,6 +505,8 @@ static void destroy_hproc_mrs(struct heca_process *hproc)
                 synchronize_rcu();
                 kfree(mr);
         } while(1);
+
+        kset_unregister(hproc->hmrs_kset);
 }
 
 static void remove_hproc(struct heca_process *hproc){
@@ -514,7 +523,7 @@ static void remove_hproc(struct heca_process *hproc){
                                 (unsigned long) hproc->mm);
         }
         mutex_unlock(&heca_state->heca_state_mutex);
-
+        /*FIXME: checkif we need to protect the list del*/
         list_del(&hproc->hproc_ptr);
         radix_tree_delete(&hspace->hprocs_tree_root,
                         (unsigned long) hproc->hproc_id);
@@ -623,7 +632,7 @@ struct heca_process *find_local_hproc_from_list(
         return NULL;
 }
 /*
- * Teardown operation 
+ * Teardown operation
  */
 
 void  teardown_hproc(struct heca_process *hproc){
