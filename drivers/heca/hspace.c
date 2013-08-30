@@ -233,7 +233,7 @@ int create_hspace(__u32 hspace_id)
                 goto kobj_fail;
         new_hspace->hprocs_kset = kset_create_and_add(HPROCS_KSET, NULL,
                         &new_hspace->kobj);
-        if(!heca_state->hspaces_kset)
+        if(!new_hspace->hprocs_kset)
                 goto kset_fail;
         heca_printk("registered hspace %p, hspace_id : %u, res: %d",
                         new_hspace, hspace_id, r);
