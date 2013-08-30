@@ -76,7 +76,6 @@ int heca_detach_task(struct task_struct *tsk)
                 local_left=0;
                 list_for_each_entry_safe (hproc, tmp_hproc,
                                 &hspace->hprocs_list, hproc_ptr) {
-                        local_left += is_hproc_local(hproc);
                         rcu_read_lock();
                         if (tsk == find_task_by_vpid(hproc->pid)) {
                                 rcu_read_unlock();
@@ -86,6 +85,7 @@ int heca_detach_task(struct task_struct *tsk)
                                 teardown_hproc(hproc);
                         } else {
                                 rcu_read_unlock();
+                                local_left += is_hproc_local(hproc);
                         }
                 }
                 if(!local_left)

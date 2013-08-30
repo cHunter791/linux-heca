@@ -1743,20 +1743,22 @@ struct tx_buffer_element *try_get_next_empty_tx_reply_ele(
 
 static void remove_hprocs_for_conn(struct heca_connection *conn)
 {
-        struct heca_space *hspace;
-        struct heca_process *hproc;
-        struct list_head *pos, *n, *it;
-/* FIXME: check we do all that under the right mutex and we clean up hspace if
- * needed ( last local hproc )
- */
-        list_for_each (pos, &get_heca_module_state()->hspaces_list) {
-                hspace = list_entry(pos, struct heca_space, hspace_ptr);
-                list_for_each_safe (it, n, &hspace->hprocs_list) {
-                        hproc = list_entry(it, struct heca_process,
-                                        hproc_ptr);
+        int local_left;
+        struct heca_space *hspace, *tmp_hspace;
+        struct heca_process *hproc, *tmp_hproc;
+
+        list_for_each_entry_safe (hspace, tmp_hspace,
+                        &get_heca_module_state()->hspaces_list, hspace_ptr) {
+                local_left=0;
+                list_for_each_entry_safe (hproc, tmp_hproc,
+                                &hspace->hprocs_list, hproc_ptr) {
                         if (hproc->connection == conn)
                                 teardown_hproc(hproc);
+                        else
+                                local_left += is_hproc_local(hproc);
                 }
+                if(!local_left)
+                        teardown_hspace(hspace);
         }
 }
 
