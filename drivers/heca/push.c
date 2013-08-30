@@ -14,6 +14,9 @@
 #include <asm-generic/cacheflush.h>
 #include "../../../mm/internal.h"
 
+#include "hutils.h"
+#include "hproc.h"
+
 #include "ioctl.h"
 #include "trace.h"
 #include "struct.h"
@@ -633,7 +636,7 @@ void heca_invalidate_readers(struct heca_process *hproc, unsigned long addr,
                                 if (likely(mr))
                                         heca_claim_page(hproc, remote_hproc, mr,
                                                         addr, NULL, 0);
-                                release_hproc(remote_hproc);
+                                hproc_put(remote_hproc);
                         }
                 }
 
@@ -845,7 +848,7 @@ retry:
         maintainer = find_hproc(hproc->hspace, maintainer_id);
         if (likely(maintainer)) {
                 descriptor = maintainer->descriptor;
-                release_hproc(maintainer);
+                hproc_put(maintainer);
         } else {
                 descriptor = mr->descriptor;
         }
@@ -933,7 +936,7 @@ int push_back_if_remote_heca_page(struct page *page)
                 /* lookup a remote mr owner, to push the page to */
                 mr = search_heca_mr_by_addr(hproc, address);
                 if (!mr || mr->flags & (MR_LOCAL | MR_COPY_ON_ACCESS)) {
-                        release_hproc(hproc);
+                        hproc_put(hproc);
                         continue;
                 }
                 /* we need to unlock the VMA before doing and Heca operation
@@ -952,7 +955,7 @@ int push_back_if_remote_heca_page(struct page *page)
                         unlock_page(page);
                 }
 
-                release_hproc(hproc);
+                hproc_put(hproc);
                 ret = 1;
                 goto out;
         }

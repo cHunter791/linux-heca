@@ -5,13 +5,18 @@
  */
 #include <linux/list.h>
 
+#include "hutils.h"
+#include "hproc.h"
+#include "hspace.h"
+
 #include "ioctl.h"
 #include "trace.h"
 #include "conn.h"
 #include "base.h"
 #include "struct.h"
 #include "ops.h"
-#include "sysfs.h"
+#include "transport.h"
+#include "hecatonchire.h"
 
 #define ntohll(x) be64_to_cpu(x)
 #define htonll(x) cpu_to_be64(x)
@@ -1486,12 +1491,6 @@ int server_event_handler(struct rdma_cm_id *id, struct rdma_cm_event *ev)
                         goto err;
                 }
 
-                ret = create_connection_sysfs_entry(conn);
-                if (ret) {
-                        heca_printk(KERN_ERR "create_conn_sysfs_entry failed: %d",
-                                        ret);
-                        goto err;
-                }
 
                 atomic_set(&conn->alive, 1);
                 break;
@@ -1632,10 +1631,6 @@ static int create_connection(struct heca_transport_manager *htm,
         if (IS_ERR(conn->cm_id))
                 goto err1;
 
-        if (create_connection_sysfs_entry(conn)) {
-                heca_printk(KERN_ERR "create_conn_sysfs_entry failed");
-                goto err1;
-        }
 
         return rdma_resolve_addr(conn->cm_id, (struct sockaddr *) &conn->local,
                         (struct sockaddr*) &conn->remote, 2000);
@@ -1702,7 +1697,7 @@ done:
         hproc->connection = conn;
 
 failed:
-        release_hproc(hproc);
+        hproc_put(hproc);
 no_hproc:
         mutex_unlock(&hspace->hspace_mutex);
         heca_printk(KERN_INFO "hspace %d hproc %d hproc_connect ip %pI4: %d",
@@ -1753,15 +1748,16 @@ static void remove_hprocs_for_conn(struct heca_connection *conn)
         struct heca_space *hspace;
         struct heca_process *hproc;
         struct list_head *pos, *n, *it;
-
+/* FIXME: check we do all that under the right mutex and we clean up hspace if
+ * needed ( last local hproc )
+ */
         list_for_each (pos, &get_heca_module_state()->hspaces_list) {
                 hspace = list_entry(pos, struct heca_space, hspace_ptr);
                 list_for_each_safe (it, n, &hspace->hprocs_list) {
                         hproc = list_entry(it, struct heca_process,
                                         hproc_ptr);
                         if (hproc->connection == conn)
-                                remove_hproc(hspace->hspace_id,
-                                                hproc->hproc_id);
+                                teardown_hproc(hproc);
                 }
         }
 }
@@ -1801,7 +1797,6 @@ int destroy_connection(struct heca_connection *conn)
         heca_destroy_page_pool(conn);
 
         erase_rb_conn(conn);
-        delete_connection_sysfs_entry(conn);
         vfree(conn);
 
         return ret;

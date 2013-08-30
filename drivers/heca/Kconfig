@@ -1,9 +1,9 @@
 config HECA
 	tristate "HECA"
-	depends on NUMA && RDS && INFINIBAND && INFINIBAND_ADDR_TRANS && INET && MMU_NOTIFIER && MMU
+	depends on NUMA && INFINIBAND && INFINIBAND_ADDR_TRANS && INET && MMU_NOTIFIER && MMU
 	default m
 	help
-	  Enable HECA - running single VM over several linux hosts with qemu/kvm.
+	  Enable HECA - allow sharing of memory of processes  accross multiple physical servers
 
 config HECA_DEBUG
 	bool "HECA_DEBUG"

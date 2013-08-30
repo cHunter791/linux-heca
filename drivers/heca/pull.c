@@ -12,6 +12,9 @@
 #include <asm-generic/cacheflush.h>
 #include "../../../mm/internal.h"
 
+#include "hproc.h"
+
+
 #include "ioctl.h"
 #include "trace.h"
 #include "struct.h"
@@ -657,7 +660,7 @@ static struct heca_page_cache *heca_cache_add_send(
                                 heca_get_remote_page(vma, norm_addr, new_hpc,
                                                 fault_hproc, fault_mr,
                                                 first_hproc, tag, r, ppe);
-                                release_hproc(first_hproc);
+                                hproc_put(first_hproc);
                         }
                         for (r = 1; r < hprocs.num; r++) {
                                 struct heca_process *remote_hproc;
@@ -669,7 +672,7 @@ static struct heca_page_cache *heca_cache_add_send(
                                                         new_hpc, fault_hproc,
                                                         fault_mr, remote_hproc,
                                                         tag, r, NULL);
-                                        release_hproc(remote_hproc);
+                                        hproc_put(remote_hproc);
                                 }
                         }
                         return new_hpc;
@@ -690,7 +693,7 @@ fail:
                 heca_dealloc_hpc(&new_hpc);
         }
         if (first_hproc)
-                release_hproc(first_hproc);
+                hproc_put(first_hproc);
         return found_hpc;
 }
 
@@ -844,7 +847,7 @@ static int heca_fault_do_readahead(struct mm_struct *mm, unsigned long addr,
                                 cont_back = 0;
                 }
                 if (trylock_page(hpc->pages[0])) {
-                        release_hproc(hproc);
+                        hproc_put(hproc);
                         return 1;
                 }
                 j++;
@@ -878,7 +881,7 @@ static int heca_maintain_notify(struct heca_process *hproc,
                 owner = find_hproc(hproc->hspace, hprocs.ids[i]);
                 if (likely(owner)) {
                         r = heca_claim_page(hproc, owner, mr, addr, NULL, 0);
-                        release_hproc(owner);
+                        hproc_put(owner);
                         break;
                 }
         }
@@ -919,7 +922,7 @@ int heca_do_page_fault(struct mm_struct *mm, struct vm_area_struct *vma,
 
         fault_mr = search_heca_mr_by_addr(fault_hproc, norm_addr);
         if (unlikely(!fault_mr)) {
-                release_hproc(fault_hproc);
+                hproc_put(fault_hproc);
                 return VM_FAULT_ERROR;
         }
 
@@ -949,7 +952,7 @@ int heca_do_page_fault(struct mm_struct *mm, struct vm_area_struct *vma,
                                 ret |= VM_FAULT_RETRY;
                                 up_read(&mm->mmap_sem);
                         }
-                        release_hproc(fault_hproc);
+                        hproc_put(fault_hproc);
                         goto out_no_dpc;
                 }
         }
@@ -972,7 +975,7 @@ int heca_do_page_fault(struct mm_struct *mm, struct vm_area_struct *vma,
                         if (likely(pte_same(*page_table, orig_pte)))
                                 ret = VM_FAULT_OOM;
                         pte_unmap_unlock(page_table, ptl);
-                        release_hproc(fault_hproc);
+                        hproc_put(fault_hproc);
                         goto out_no_dpc;
                 }
                 ret = VM_FAULT_MAJOR;
@@ -1010,7 +1013,7 @@ int heca_do_page_fault(struct mm_struct *mm, struct vm_area_struct *vma,
          * cleared, then re-throw the fault.
          */
 lock:
-        release_hproc(fault_hproc);
+        hproc_put(fault_hproc);
         if (!lock_page_or_retry(hpc->pages[0], mm, flags)) {
                 ret |= VM_FAULT_RETRY;
                 goto out;
@@ -1202,7 +1205,7 @@ int heca_write_fault(struct mm_struct *mm, struct vm_area_struct *vma,
 
         mr = search_heca_mr_by_addr(hproc, addr);
         if (!mr) {
-                release_hproc(hproc);
+                hproc_put(hproc);
                 return 0;
         }
 
@@ -1309,7 +1312,7 @@ retry:
                 /* required as the page is locked, and will unlock only on claim_ack */
                 page_cache_get(page);
                 heca_claim_page(hproc, mnt_hproc, mr, addr, page, 1);
-                release_hproc(mnt_hproc);
+                hproc_put(mnt_hproc);
 
         } else {
                 heca_invalidate_readers(hproc, addr, 0);
@@ -1362,7 +1365,7 @@ write:
         heca_release_pull_hpc(&hpc);
 
 out:
-        release_hproc(hproc);
+        hproc_put(hproc);
         return 1;
 }
 

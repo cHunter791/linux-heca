@@ -1,4 +1,9 @@
 #include <linux/pid_namespace.h>
+
+#include "hutils.h"
+#include "hspace.h"
+#include "hproc.h"
+
 #include "ioctl.h"
 #include "task.h"
 #include "base.h"
@@ -62,28 +67,29 @@ int heca_attach_task(struct task_struct *tsk)
 
 int heca_detach_task(struct task_struct *tsk)
 {
-        int ret = 0;
-        struct heca_space *hspace;
-        struct heca_process *hproc;
-        struct list_head *pos, *n, *it;
+        int ret = 0, local_left;
+        struct heca_space *hspace, *tmp_hspace;
+        struct heca_process *hproc, *tmp_hproc;
 
-        list_for_each (pos, &get_heca_module_state()->hspaces_list) {
-                hspace = list_entry(pos, struct heca_space, hspace_ptr);
-                list_for_each_safe (it, n, &hspace->hprocs_list) {
-                        hproc = list_entry(it, struct heca_process, hproc_ptr);
-
+        list_for_each_entry_safe (hspace, tmp_hspace,
+                        &get_heca_module_state()->hspaces_list, hspace_ptr) {
+                local_left=0;
+                list_for_each_entry_safe (hproc, tmp_hproc,
+                                &hspace->hprocs_list, hproc_ptr) {
+                        local_left += is_hproc_local(hproc);
                         rcu_read_lock();
                         if (tsk == find_task_by_vpid(hproc->pid)) {
                                 rcu_read_unlock();
                                 heca_printk(KERN_DEBUG "removing HPROC "
                                                 "associated with pid %d",
                                                 hproc->pid);
-                                remove_hproc(hspace->hspace_id,
-                                                hproc->hproc_id);
+                                teardown_hproc(hproc);
                         } else {
                                 rcu_read_unlock();
                         }
                 }
+                if(!local_left)
+                        teardown_hspace(hspace);
         }
         return ret;
 }

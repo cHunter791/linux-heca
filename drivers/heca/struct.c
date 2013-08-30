@@ -4,6 +4,9 @@
  * Aidan Shribman <aidan.shribman@sap.com> 2012 (c)
  */
 #include <linux/pagemap.h>
+
+#include "hproc.h"
+
 #include "ioctl.h"
 #include "trace.h"
 #include "struct.h"
@@ -283,7 +286,7 @@ struct heca_page_cache *heca_alloc_hpc(struct heca_process *hproc,
         if (unlikely(!hpc))
                 goto out;
 
-        atomic_inc(&hproc->refs);
+        hproc_get(hproc);
         atomic_set(&hpc->found, -1);
         atomic_set(&hpc->nproc, nproc);
         hpc->released = 0;
@@ -303,7 +306,7 @@ void heca_dealloc_hpc(struct heca_page_cache **hpc)
 
         for (i = 0; i < (*hpc)->hprocs.num; i++)
                 (*hpc)->pages[i] = 0;
-        release_hproc((*hpc)->hproc);
+        hproc_put((*hpc)->hproc);
         kmem_cache_free(heca_cache_kmem, *hpc);
         *hpc = NULL;
 }
