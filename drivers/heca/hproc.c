@@ -63,6 +63,8 @@ struct hproc_attr {
 static void kobj_hproc_release(struct kobject *k)
 {
         struct heca_process *hproc = to_hproc(k);
+        heca_printk(KERN_INFO "releasing hproc %p, hproc_id: %u hspace_id: %u ",
+                        hproc, hproc->hproc_id, hproc->hspace->hspace_id );
         trace_heca_free_hproc(hproc->hproc_id);
         synchronize_rcu();
         kfree(hproc);
@@ -286,7 +288,8 @@ int create_hproc(struct hecaioc_hproc *hproc_info)
                 seqlock_init(&new_hproc->push_cache_lock);
         }
 
-        r = kobject_init_and_add(&new_hproc->kobj, &ktype_hproc, &hspace->kobj,
+        new_hproc->kobj.kset = hspace->hprocs_kset;
+        r = kobject_init_and_add(&new_hproc->kobj, &ktype_hproc, NULL,
                         HPROC_KOBJECT, new_hproc->hproc_id);
         if(r){
                 goto kobj_err;

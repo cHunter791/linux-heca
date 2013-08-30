@@ -20,7 +20,7 @@
 #define to_hspace(s)            container_of(s, struct heca_space, kobj)
 #define to_hspace_attr(sa)      container_of(sa, struct hspace_attr, attr)
 /*
- * Creator / destructor 
+ * Creator / destructor
  */
 
 static void teardown_hprocs(struct heca_space *hspace)
@@ -35,25 +35,6 @@ static void teardown_hprocs(struct heca_space *hspace)
 
         kset_unregister(hspace->hprocs_kset);
 }
-static void remove_hspace(struct heca_space *hspace)
-{
-        struct heca_module_state *heca_state = get_heca_module_state();
-
-        BUG_ON(!hspace);
-
-        mutex_lock(&heca_state->heca_state_mutex);
-        list_del(&hspace->hspace_ptr);
-        radix_tree_delete(&heca_state->hspaces_tree_root,
-                        (unsigned long) hspace->hspace_id);
-        mutex_unlock(&heca_state->heca_state_mutex);
-        synchronize_rcu();
-
-        mutex_lock(&heca_state->heca_state_mutex);
-        kfree(hspace);
-        mutex_unlock(&heca_state->heca_state_mutex);
-
-}
-
 
 void teardown_hspace(struct heca_space *hspace)
 {
@@ -78,7 +59,23 @@ struct hspace_attr {
 static void kobj_hspace_release(struct kobject *k)
 {
         struct heca_space *hspace = to_hspace(k);
-        remove_hspace(hspace);
+        struct heca_module_state *heca_state = get_heca_module_state();
+
+        BUG_ON(!hspace);
+
+        heca_printk(KERN_INFO "releasing hspace %p, hspace_id: %u ", hspace,
+                        hspace->hspace_id);
+        mutex_lock(&heca_state->heca_state_mutex);
+        list_del(&hspace->hspace_ptr);
+        radix_tree_delete(&heca_state->hspaces_tree_root,
+                        (unsigned long) hspace->hspace_id);
+        mutex_unlock(&heca_state->heca_state_mutex);
+        synchronize_rcu();
+
+        mutex_lock(&heca_state->heca_state_mutex);
+        kfree(hspace);
+        mutex_unlock(&heca_state->heca_state_mutex);
+
 }
 
 static ssize_t heca_space_show(struct kobject *k, struct attribute *a,
@@ -106,8 +103,8 @@ static struct kobj_type ktype_hspace = {
 };
 
 
-/* 
- * Main Hspace function 
+/*
+ * Main Hspace function
  */
 
 int deregister_hspace(__u32 hspace_id)
