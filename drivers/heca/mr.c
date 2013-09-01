@@ -18,6 +18,16 @@
 #define to_mr(m)                container_of(m, struct heca_memory_region, kobj)
 #define to_mr_attr(ma)          container_of(ma, struct hmr_attr, attr)
 
+
+void heca_memory_region_release(struct heca_memory_region * hmr)
+{
+
+                heca_printk(KERN_INFO "Releasing MR :  mr_id: %u", hmr->hmr_id);
+                synchronize_rcu();
+                kfree(hmr);
+
+}
+
 struct heca_memory_region *find_heca_mr(struct heca_process *hproc,
                 u32 id)
 {

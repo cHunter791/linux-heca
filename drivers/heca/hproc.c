@@ -486,6 +486,8 @@ static void destroy_hproc_mrs(struct heca_process *hproc)
 {
         struct rb_root *root = &hproc->hmr_tree_root;
 
+        heca_printk(KERN_INFO "Releasing MRs of hproc: %p , id: %u ", hproc,
+                        hproc->hproc_id);
         do {
                 struct heca_memory_region *mr;
                 struct rb_node *node;
@@ -498,12 +500,9 @@ static void destroy_hproc_mrs(struct heca_process *hproc)
                 }
                 mr = rb_entry(node, struct heca_memory_region, rb_node);
                 rb_erase(&mr->rb_node, root);
+                radix_tree_delete(&hproc->hmr_id_tree_root, mr->hmr_id);
                 write_sequnlock(&hproc->hmr_seq_lock);
-                heca_printk(KERN_INFO "removing MR : hspace_id: %u hproc_id: %u, mr_id: %u",
-                                hproc->hspace->hspace_id, hproc->hproc_id,
-                                mr->hmr_id);
-                synchronize_rcu();
-                kfree(mr);
+                heca_memory_region_release(mr);
         } while(1);
 
         kset_unregister(hproc->hmrs_kset);
