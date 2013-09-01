@@ -38,6 +38,8 @@ static void teardown_hprocs(struct heca_space *hspace)
 
 void teardown_hspace(struct heca_space *hspace)
 {
+        heca_printk(KERN_INFO "Tearing Down hspace %p,hspace_id: %u ", hspace,
+                        hspace->hspace_id );
         teardown_hprocs(hspace);
         /* we remove sysfs entry */
         kobject_del(&hspace->kobj);
@@ -181,14 +183,12 @@ int create_hspace(__u32 hspace_id)
         /* already exists? (first check; the next one is under lock */
         found_hspace = find_hspace(hspace_id);
         if (found_hspace) {
-                heca_printk("we already have the hspace in place");
                 return -EEXIST;
         }
 
         /* allocate a new hspace */
         new_hspace = kzalloc(sizeof(*new_hspace), GFP_KERNEL);
         if (!new_hspace) {
-                heca_printk("can't allocate");
                 return -ENOMEM;
         }
         new_hspace->hspace_id = hspace_id;
@@ -205,12 +205,10 @@ int create_hspace(__u32 hspace_id)
                         break;
 
                 if (r == -ENOMEM) {
-                        heca_printk("radix_tree_preload: ENOMEM retrying ...");
                         mdelay(2);
                         continue;
                 }
 
-                heca_printk("radix_tree_preload: failed %d", r);
                 goto failed;
         }
 
@@ -220,10 +218,8 @@ int create_hspace(__u32 hspace_id)
         spin_unlock(&heca_state->radix_lock);
         radix_tree_preload_end();
 
-        if (r) {
-                heca_printk("radix_tree_insert: failed %d", r);
+        if (r)
                 goto failed;
-        }
 
         list_add(&new_hspace->hspace_ptr, &heca_state->hspaces_list);
         new_hspace->kobj.kset = heca_state->hspaces_kset;

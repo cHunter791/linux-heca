@@ -499,7 +499,7 @@ static void destroy_hproc_mrs(struct heca_process *hproc)
                 mr = rb_entry(node, struct heca_memory_region, rb_node);
                 rb_erase(&mr->rb_node, root);
                 write_sequnlock(&hproc->hmr_seq_lock);
-                heca_printk(KERN_INFO "removing hspace_id: %u hproc_id: %u, mr_id: %u",
+                heca_printk(KERN_INFO "removing MR : hspace_id: %u hproc_id: %u, mr_id: %u",
                                 hproc->hspace->hspace_id, hproc->hproc_id,
                                 mr->hmr_id);
                 synchronize_rcu();
@@ -624,8 +624,6 @@ struct heca_process *find_local_hproc_from_list(
         list_for_each_entry (tmp_hproc, &hspace->hprocs_list, hproc_ptr) {
                 if (!is_hproc_local(tmp_hproc))
                         continue;
-                heca_printk(KERN_DEBUG "hspace %d local hproc is %d",
-                                hspace->hspace_id, tmp_hproc->hproc_id);
                 tmp_hproc = hproc_get_unless_zero(tmp_hproc);
                 return tmp_hproc;
         }
@@ -637,6 +635,8 @@ struct heca_process *find_local_hproc_from_list(
 
 void  teardown_hproc(struct heca_process *hproc){
 
+        heca_printk(KERN_INFO "Tearing Down hproc %p, hproc_id: %u hspace_id: %u ",
+                        hproc, hproc->hproc_id, hproc->hspace->hspace_id );
         /* we remove the kobject entry */
         kobject_del(&hproc->kobj);
         /* cleanup the hproc */
