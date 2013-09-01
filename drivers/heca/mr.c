@@ -13,20 +13,72 @@
 
 #include "ops.h"
 
-#define MR_KOBJECT              "%u"
+#define HMR_KOBJECT              "%u"
 
-#define to_mr(m)                container_of(m, struct heca_memory_region, kobj)
-#define to_mr_attr(ma)          container_of(ma, struct hmr_attr, attr)
+#define to_hmr(m)                container_of(m, struct heca_memory_region, kobj)
+#define to_hmr_attr(ma)          container_of(ma, struct hmr_attr, attr)
 
 
-void heca_memory_region_release(struct heca_memory_region * hmr)
+/*
+ * Heca proc  Kobject
+ */
+
+struct hmr_attr {
+        struct attribute attr;
+        ssize_t(*show)(struct heca_memory_region *, char *);
+        ssize_t(*store)(struct heca_memory_region *, char *, size_t);
+};
+
+static void kobj_hmr_release(struct kobject *k)
 {
+        struct heca_memory_region *hmr = to_hmr(k);
 
-                heca_printk(KERN_INFO "Releasing MR :  mr_id: %u", hmr->hmr_id);
-                synchronize_rcu();
-                kfree(hmr);
+        heca_printk(KERN_INFO "Releasing MR : %p ,  mr_id: %u", hmr,
+                        hmr->hmr_id);
+        synchronize_rcu();
+        kfree(hmr);
+}
+
+static ssize_t hmr_show(struct kobject *k, struct attribute *a,
+                char *buffer)
+{
+        struct heca_memory_region *hmr = to_hmr(k);
+        struct hmr_attr *hmr_attr = to_hmr_attr(a);
+        if (hmr_attr->show)
+                return hmr_attr->show(hmr,buffer);
+        return 0;
+}
+
+static struct hmr_attr *hmr_attr[] = {
+        NULL
+};
+
+static struct sysfs_ops hmr_ops = {
+        .show = hmr_show,
+};
+
+static struct kobj_type ktype_hmr = {
+        .release = kobj_hmr_release,
+        .sysfs_ops = &hmr_ops,
+        .default_attrs = (struct attribute **) hmr_attr,
+};
+
+void teardown_heca_memory_region(struct heca_memory_region *hmr)
+{
+        kobject_del(&hmr->kobj);
+        kobject_put(&hmr->kobj);
 
 }
+
+static void remove_hmr_from_hproc_trees(struct heca_process *hproc,
+                struct heca_memory_region *hmr)
+{
+        write_seqlock(&hproc->hmr_seq_lock);
+        rb_erase(&hmr->rb_node, &hproc->hmr_tree_root);
+        radix_tree_delete(&hproc->hmr_id_tree_root, hmr->hmr_id);
+        write_sequnlock(&hproc->hmr_seq_lock);
+}
+
 
 struct heca_memory_region *find_heca_mr(struct heca_process *hproc,
                 u32 id)
@@ -167,13 +219,18 @@ int create_heca_mr(struct hecaioc_hmr *udata)
         if (!mr) {
                 heca_printk(KERN_ERR "can't allocate memory for MR");
                 ret = -ENOMEM;
-                goto out_free;
+                goto out;
         }
 
         mr->hmr_id = udata->hmr_id;
         mr->addr = (unsigned long) udata->addr;
         mr->sz = udata->sz;
 
+        mr->kobj.kset = local_hproc->hmrs_kset;
+        ret = kobject_init_and_add(&mr->kobj, &ktype_hmr, NULL,
+                        HMR_KOBJECT, mr->hmr_id);
+        if(ret)
+                goto kobj_err;
         if (insert_heca_mr(local_hproc, mr)){
                 heca_printk(KERN_ERR "insert MR failed  addr 0x%lx",
                                 udata->addr);
@@ -218,18 +275,24 @@ int create_heca_mr(struct hecaioc_hmr *udata)
         if (!(mr->flags & MR_LOCAL) && (udata->flags & UD_AUTO_UNMAP)) {
                 ret = unmap_range(hspace, mr->descriptor, local_hproc->pid,
                                 mr->addr, mr->sz);
+                if(ret)
+                        goto out_remove_tree;
         }
+        hproc_put(local_hproc);
+        heca_printk(KERN_INFO "MR id [%d] addr [0x%lx] sz [0x%lx] --> ret %d",
+                        udata->hmr_id, udata->addr, udata->sz, ret);
+        return ret;
 
-        goto out;
 
 out_remove_tree:
-        rb_erase(&mr->rb_node, &local_hproc->hmr_tree_root);
+        remove_hmr_from_hproc_trees(local_hproc, mr);
 out_free:
-        kfree(mr);
+        teardown_heca_memory_region(mr);
 out:
-        if (local_hproc)
-                hproc_put(local_hproc);
-        heca_printk(KERN_INFO "id [%d] addr [0x%lx] sz [0x%lx] --> ret %d",
-                        udata->hmr_id, udata->addr, udata->sz, ret);
+        hproc_put(local_hproc);
+        return ret;
+kobj_err:
+        kobject_put(&mr->kobj);
+        hproc_put(local_hproc);
         return ret;
 }

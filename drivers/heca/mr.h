@@ -10,6 +10,7 @@
 
 #include "ioctl.h"
 #include "hproc.h"
+#include "hutils.h"
 
 struct heca_memory_region {
         unsigned long addr;
@@ -18,6 +19,8 @@ struct heca_memory_region {
         u32 hmr_id;
         u32 flags;
         struct rb_node rb_node;
+
+        struct kobject kobj;
 };
 
 
@@ -25,6 +28,6 @@ struct heca_memory_region *find_heca_mr(struct heca_process *, u32);
 struct heca_memory_region *search_heca_mr_by_addr(struct heca_process *,
                 unsigned long);
 int create_heca_mr(struct hecaioc_hmr *udata);
-void heca_memory_region_release(struct heca_memory_region *);
+void teardown_heca_memory_region(struct heca_memory_region *);
 
 #endif /* MR_H_ */

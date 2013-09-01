@@ -502,7 +502,7 @@ static void destroy_hproc_mrs(struct heca_process *hproc)
                 rb_erase(&mr->rb_node, root);
                 radix_tree_delete(&hproc->hmr_id_tree_root, mr->hmr_id);
                 write_sequnlock(&hproc->hmr_seq_lock);
-                heca_memory_region_release(mr);
+                teardown_heca_memory_region(mr);
         } while(1);
 
         kset_unregister(hproc->hmrs_kset);
