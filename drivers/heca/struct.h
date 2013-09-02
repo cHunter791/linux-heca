@@ -27,7 +27,7 @@
 #include <linux/llist.h>
 #include <linux/heca.h>
 
-#include "transport.h"
+#include "hecatonchire.h"
 
 #define RDMA_PAGE_SIZE      PAGE_SIZE
 

@@ -122,7 +122,7 @@ int deregister_hspace(__u32 hspace_id)
                         teardown_hspace(hspace);
         }
 
-        destroy_htm_listener(heca_state);
+        destroy_htm_listener(heca_state->htm);
         return ret;
 }
 
