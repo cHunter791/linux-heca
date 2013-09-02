@@ -531,7 +531,7 @@ retry:
                                         pte_entry, &pd, hproc_id)) {
                         res = HECA_EXTRACT_REDIRECT;
 
-                /* it's time to fault the page in... */
+                        /* it's time to fault the page in... */
                 } else if (deferred) {
                         pte_unmap_unlock(pd.pte, ptl);
                         if (!heca_initiate_fault_fast(mm, addr, 1))
@@ -586,8 +586,9 @@ retry:
                         heca_add_reader(local_hproc, addr,
                                         remote_hproc->hproc_id);
                 } else {
-                        pte_entry = heca_descriptor_to_pte(remote_hproc->descriptor,
-                        		HECA_INFLIGHT);
+                        pte_entry = heca_descriptor_to_pte(
+                                        remote_hproc->descriptor,
+                                        HECA_INFLIGHT);
                         page_remove_rmap(*page);
                         dec_mm_counter(mm, MM_ANONPAGES);
                         /* FIXME: the following line might_sleep, as it sends msgs */
@@ -1096,7 +1097,7 @@ retry:
                         heca_printk(KERN_ERR "ksm_madvise ret : %d", r);
                         // HECA1 : better ksm error handling required.
                         r = -EFAULT;
-                       goto out;
+                        goto out;
                 }
                 goto retry;
         }

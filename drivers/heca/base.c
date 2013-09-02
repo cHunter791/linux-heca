@@ -92,10 +92,8 @@ int unmap_ps(struct hecaioc_ps *udata)
         struct heca_memory_region *mr = NULL;
         struct mm_struct *mm = find_mm_by_pid(udata->pid);
 
-        if (!mm) {
-                heca_printk(KERN_ERR "can't find pid %d", udata->pid);
+        if (!mm)
                 goto out;
-        }
 
         local_hproc = find_local_hproc_from_mm(mm);
         if (!local_hproc)
@@ -113,6 +111,8 @@ int unmap_ps(struct hecaioc_ps *udata)
 out:
         if (local_hproc)
                 hproc_put(local_hproc);
+        if (r)
+                heca_printk(KERN_ERR "Failed unmap %d", r);
         return r;
 }
 
@@ -123,10 +123,8 @@ int pushback_ps(struct hecaioc_ps *udata)
         struct page *page;
         struct mm_struct *mm = find_mm_by_pid(udata->pid);
 
-        if (!mm) {
-                heca_printk(KERN_ERR "can't find pid %d", udata->pid);
+        if (!mm)
                 goto out;
-        }
 
         addr = start_addr = ((unsigned long) udata->addr) & PAGE_MASK;
         for (addr = start_addr; addr < start_addr + udata->sz;
@@ -141,6 +139,8 @@ int pushback_ps(struct hecaioc_ps *udata)
         }
 
 out:
+        if (r)
+                heca_printk(KERN_ERR "Failed pushback %d", r);
         return r;
 }
 

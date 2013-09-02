@@ -17,10 +17,10 @@
 
 void teardown_htm(struct heca_transport_manager *htm)
 {
+        heca_printk(KERN_INFO "tearing down htm %p htm id: %p", htm, htm->cm_id);
         /* we remove sysfs entry */
         kobject_del(&htm->kobj);
         /* move refcount to zero and free it */
-        heca_printk(KERN_INFO "put being run");
         kobject_put(&htm->kobj);
 }
 
@@ -170,7 +170,6 @@ int create_htm_listener(struct heca_module_state *heca_state, unsigned long ip,
                 heca_printk(KERN_ERR "Failed rdma_listen: %d", ret);
 
         create_htm(htm);
-        //kobject_del(&htm->kobj);
         return 0;
 
 failed:

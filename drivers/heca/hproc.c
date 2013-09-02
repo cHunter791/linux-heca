@@ -19,12 +19,13 @@
 #include "conn.h"
 
 #define HPROC_KOBJECT           "%u"
+#define HMRS_KSET               "memory_regions"
 
 #define to_hproc(p)             container_of(p, struct heca_process, kobj)
 #define to_hproc_attr(pa)       container_of(pa, struct hproc_attr, attr)
 
 /*
- * Hproc refcount 
+ * Hproc refcount
  */
 
 struct heca_process *hproc_get(struct heca_process *hproc)
@@ -294,6 +295,10 @@ int create_hproc(struct hecaioc_hproc *hproc_info)
         if(r){
                 goto kobj_err;
         }
+        new_hproc->hmrs_kset = kset_create_and_add(HMRS_KSET, NULL,
+                        &new_hproc->kobj);
+        if(!new_hproc->hmrs_kset)
+                goto kset_fail;
         /* register hproc by id and mm_struct (must come before hspace_get_descriptor) */
         r = insert_hproc_to_radix_trees(heca_state, hspace, new_hproc);
         if (r)
@@ -338,6 +343,8 @@ no_mm:
         new_hproc = NULL;
         return r;
 radix_fail:
+kset_fail:
+        kobject_del(&new_hproc->kobj);
 kobj_err:
         mutex_unlock(&hspace->hspace_mutex);
         kobject_put(&new_hproc->kobj);
@@ -479,6 +486,8 @@ static void destroy_hproc_mrs(struct heca_process *hproc)
 {
         struct rb_root *root = &hproc->hmr_tree_root;
 
+        heca_printk(KERN_INFO "Releasing MRs of hproc: %p , id: %u ", hproc,
+                        hproc->hproc_id);
         do {
                 struct heca_memory_region *mr;
                 struct rb_node *node;
@@ -491,13 +500,12 @@ static void destroy_hproc_mrs(struct heca_process *hproc)
                 }
                 mr = rb_entry(node, struct heca_memory_region, rb_node);
                 rb_erase(&mr->rb_node, root);
+                radix_tree_delete(&hproc->hmr_id_tree_root, mr->hmr_id);
                 write_sequnlock(&hproc->hmr_seq_lock);
-                heca_printk(KERN_INFO "removing hspace_id: %u hproc_id: %u, mr_id: %u",
-                                hproc->hspace->hspace_id, hproc->hproc_id,
-                                mr->hmr_id);
-                synchronize_rcu();
-                kfree(mr);
+                teardown_heca_memory_region(mr);
         } while(1);
+
+        kset_unregister(hproc->hmrs_kset);
 }
 
 static void remove_hproc(struct heca_process *hproc){
@@ -514,7 +522,7 @@ static void remove_hproc(struct heca_process *hproc){
                                 (unsigned long) hproc->mm);
         }
         mutex_unlock(&heca_state->heca_state_mutex);
-
+        /*FIXME: checkif we need to protect the list del*/
         list_del(&hproc->hproc_ptr);
         radix_tree_delete(&hspace->hprocs_tree_root,
                         (unsigned long) hproc->hproc_id);
@@ -615,19 +623,19 @@ struct heca_process *find_local_hproc_from_list(
         list_for_each_entry (tmp_hproc, &hspace->hprocs_list, hproc_ptr) {
                 if (!is_hproc_local(tmp_hproc))
                         continue;
-                heca_printk(KERN_DEBUG "hspace %d local hproc is %d",
-                                hspace->hspace_id, tmp_hproc->hproc_id);
                 tmp_hproc = hproc_get_unless_zero(tmp_hproc);
                 return tmp_hproc;
         }
         return NULL;
 }
 /*
- * Teardown operation 
+ * Teardown operation
  */
 
 void  teardown_hproc(struct heca_process *hproc){
 
+        heca_printk(KERN_INFO "Tearing Down hproc %p, hproc_id: %u hspace_id: %u ",
+                        hproc, hproc->hproc_id, hproc->hspace->hspace_id );
         /* we remove the kobject entry */
         kobject_del(&hproc->kobj);
         /* cleanup the hproc */
