@@ -56,7 +56,7 @@ static struct heca_module_state *heca_state;
 
 
 /*
- * Heca Module file operations 
+ * Heca Module file operations
  */
 
 static struct file_operations heca_fops = {
@@ -66,7 +66,7 @@ static struct file_operations heca_fops = {
 };
 
 /*
- * Heca Module life Cycle 
+ * Heca Module life Cycle
  */
 
 static struct miscdevice heca_misc = {
@@ -204,7 +204,6 @@ static int heca_init(void)
         struct heca_module_state *heca_state = create_heca_module_state();
         int rc;
 
-        heca_printk(KERN_DEBUG "<enter>");
         setup_heca_module_state_ksets(heca_state);
         BUG_ON(!heca_state);
         heca_zero_pfn_init();
@@ -212,16 +211,13 @@ static int heca_init(void)
         init_hcm();
         BUG_ON(heca_hook_register(&my_heca_hook));
 
-        heca_printk(KERN_DEBUG "<exit> %d", rc);
         return rc;
 }
 module_init(heca_init);
 
 static void heca_exit(void)
 {
-        heca_printk(KERN_DEBUG "<enter>");
         destroy_heca_module_state();
-        heca_printk(KERN_DEBUG "<exit>");
 }
 module_exit(heca_exit);
 

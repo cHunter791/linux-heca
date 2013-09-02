@@ -56,6 +56,7 @@ struct heca_process {
         seqlock_t push_cache_lock;
 
         struct kobject kobj;
+        struct kset *hmrs_kset;
 
         struct llist_head delayed_gup;
         struct delayed_work delayed_gup_work;
