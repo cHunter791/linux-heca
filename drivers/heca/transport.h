@@ -1,14 +1,13 @@
 #ifndef _HECA_TRANSPORT_H
 #define _HECA_TRANSPORT_H
 
-#include <rdma/rdma_cm.h>
-#include <rdma/ib_verbs.h>
 #include <linux/mutex.h>
 #include <linux/rbtree.h>
 #include <linux/seqlock.h>
 #include <linux/in.h>
+#include <linux/kobject.h>
 
-#include "hecatonchire.h"
+struct heca_module_state;
 
 struct heca_transport_manager {
         int node_ip;
@@ -34,8 +33,7 @@ void teardown_htm(struct heca_transport_manager *);
 int create_htm(struct heca_transport_manager *);
 int create_htm_listener(struct heca_module_state *, unsigned long,
                 unsigned short);
-int destroy_htm_listener(struct heca_module_state *);
 int init_htm(void);
 int fini_htm(void);
-
+int destroy_htm_listener(struct heca_transport_manager *);
 #endif /* _HECA_TRANSPORT_H */

@@ -13,8 +13,7 @@
 #include <linux/radix-tree.h>
 #include <linux/kobject.h>
 
-#include "struct.h"
-#include "transport.h"
+struct heca_transport_manager;
 
 struct heca_module_state {
         struct heca_transport_manager *htm;

@@ -1,23 +1,104 @@
-#include <linux/rcupdate.h>
+/*
+ * Benoit Hudzia <benoit.hudzia@sap.com> 2013 (c)
+ */
+
 #include <linux/spinlock.h>
+#include <linux/rcupdate.h>
 #include <linux/errno.h>
+#include <rdma/rdma_cm.h>
+#include <rdma/ib_verbs.h>
 
 #include "transport.h"
+#include "hutils.h"
+
 #include "conn.h"
 #include "ops.h"
 #include "ioctl.h"
 #include "pull.h"
-#include "hecatonchire.h"
-#include "hutils.h"
 
 #define HTM_KOBJECT          "transport_manager"
 
 #define to_htm(s)            container_of(s, struct heca_transport_manager, kobj)
 #define to_htm_attr(sa)      container_of(sa, struct htm_attr, attr)
 
+static int htm_disconnect(struct heca_transport_manager *htm)
+{
+        struct rb_root *root = &htm->connections_rb_tree_root;
+        struct rb_node *node = rb_first(root);
+        struct heca_connection *conn;
+
+        while (node) {
+                conn = rb_entry(node, struct heca_connection, rb_node);
+                node = rb_next(node);
+                if (atomic_cmpxchg(&conn->alive, 1, 0)) {
+                        rdma_disconnect(conn->cm_id);
+                        destroy_connection(conn);
+                }
+        }
+
+        while (rb_first(root))
+                ;
+
+        return 0;
+}
+
+int destroy_htm_listener(struct heca_transport_manager *htm)
+{
+        int rc = 0;
+        struct heca_module_state *heca_state = get_heca_module_state();
+
+        heca_printk(KERN_DEBUG "<enter>");
+
+        if (!htm)
+                goto done;
+
+        if (!list_empty(&heca_state->hspaces_list)) {
+                heca_printk(KERN_INFO "can't delete htm - hspaces exist");
+                rc = -EBUSY;
+        }
+
+        htm_disconnect(htm);
+
+        if (!htm->cm_id)
+                goto destroy;
+
+        if (htm->cm_id->qp) {
+                ib_destroy_qp(htm->cm_id->qp);
+                htm->cm_id->qp = NULL;
+        }
+
+        if (htm->listen_cq) {
+                ib_destroy_cq(htm->listen_cq);
+                htm->listen_cq = NULL;
+        }
+
+        if (htm->mr) {
+                ib_dereg_mr(htm->mr);
+                htm->mr = NULL;
+        }
+
+        if (htm->pd) {
+                ib_dealloc_pd(htm->pd);
+                htm->pd = NULL;
+        }
+
+        rdma_destroy_id(htm->cm_id);
+        htm->cm_id = NULL;
+
+destroy:
+        mutex_destroy(&htm->htm_mutex);
+        kfree(htm);
+        heca_state->htm = NULL;
+
+done:
+        heca_printk(KERN_DEBUG "<exit> %d", rc);
+        return rc;
+}
+
 void teardown_htm(struct heca_transport_manager *htm)
 {
-        heca_printk(KERN_INFO "tearing down htm %p htm id: %p", htm, htm->cm_id);
+        heca_printk(KERN_INFO "tearing down htm %p htm id: %p", htm,
+                        htm->cm_id);
         /* we remove sysfs entry */
         kobject_del(&htm->kobj);
         /* move refcount to zero and free it */
@@ -33,8 +114,7 @@ struct htm_attr {
 static void kobj_htm_release(struct kobject *k)
 {
         struct heca_transport_manager *htm = to_htm(k);
-        struct heca_module_state *heca_state = get_heca_module_state();
-        destroy_htm_listener(heca_state);
+        destroy_htm_listener(htm);
 }
 
 static ssize_t heca_transport_manager_show(struct kobject *k,
@@ -96,7 +176,6 @@ int fini_htm(void)
         return 0;
 }
 
-int destroy_htm_listener(struct heca_module_state *heca_state);
 
 int create_htm_listener(struct heca_module_state *heca_state, unsigned long ip,
                 unsigned short port)
@@ -177,77 +256,5 @@ failed:
         return ret;
 }
 
-static int htm_disconnect(struct heca_transport_manager *htm)
-{
-        struct rb_root *root = &htm->connections_rb_tree_root;
-        struct rb_node *node = rb_first(root);
-        struct heca_connection *conn;
 
-        while (node) {
-                conn = rb_entry(node, struct heca_connection, rb_node);
-                node = rb_next(node);
-                if (atomic_cmpxchg(&conn->alive, 1, 0)) {
-                        rdma_disconnect(conn->cm_id);
-                        destroy_connection(conn);
-                }
-        }
-
-        while (rb_first(root))
-                ;
-
-        return 0;
-}
-
-int destroy_htm_listener(struct heca_module_state *heca_state)
-{
-        int rc = 0;
-        struct heca_transport_manager *htm = heca_state->htm;
-
-        heca_printk(KERN_DEBUG "<enter>");
-
-        if (!htm)
-                goto done;
-
-        if (!list_empty(&heca_state->hspaces_list)) {
-                heca_printk(KERN_INFO "can't delete htm - hspaces exist");
-                rc = -EBUSY;
-        }
-
-        htm_disconnect(htm);
-
-        if (!htm->cm_id)
-                goto destroy;
-
-        if (htm->cm_id->qp) {
-                ib_destroy_qp(htm->cm_id->qp);
-                htm->cm_id->qp = NULL;
-        }
-
-        if (htm->listen_cq) {
-                ib_destroy_cq(htm->listen_cq);
-                htm->listen_cq = NULL;
-        }
-
-        if (htm->mr) {
-                ib_dereg_mr(htm->mr);
-                htm->mr = NULL;
-        }
-
-        if (htm->pd) {
-                ib_dealloc_pd(htm->pd);
-                htm->pd = NULL;
-        }
-
-        rdma_destroy_id(htm->cm_id);
-        htm->cm_id = NULL;
-
-destroy:
-        mutex_destroy(&htm->htm_mutex);
-        kfree(htm);
-        heca_state->htm = NULL;
-
-done:
-        heca_printk(KERN_DEBUG "<exit> %d", rc);
-        return rc;
-}
 

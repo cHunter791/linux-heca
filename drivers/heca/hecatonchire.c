@@ -8,6 +8,8 @@
 #include <linux/heca.h>
 #include <linux/heca_hook.h>
 
+#include "hecatonchire.h"
+#include "transport.h"
 #include "hutils.h"
 #include "hspace.h"
 #include "ioctl.h"
@@ -15,7 +17,6 @@
 #include "base.h"
 #include "push.h"
 #include "task.h"
-#include "transport.h"
 
 #define HECA_MODULE_VERSION     "0.2.0"
 #define HECA_MODULE_AUTHOR      "Benoit Hudzia"
@@ -121,7 +122,7 @@ static void teardown_hspaces(void)
 static void destroy_heca_module_state(void)
 {
         teardown_hspaces();
-        destroy_htm_listener(heca_state);
+        destroy_htm_listener(heca_state->htm);
         kobject_del(&heca_state->root_kobj);
         kobject_put(&heca_state->root_kobj);
 }
