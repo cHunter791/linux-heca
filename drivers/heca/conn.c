@@ -15,6 +15,8 @@
 #include "base.h"
 #include "struct.h"
 #include "ops.h"
+#include "transport.h"
+#include "hecatonchire.h"
 
 #define ntohll(x) be64_to_cpu(x)
 #define htonll(x) cpu_to_be64(x)
@@ -315,22 +317,22 @@ static void delayed_request_flush_work_fn(struct work_struct *w)
 
 static void destroy_connection_work(struct work_struct *work)
 {
-        struct heca_connections_manager *hcm = get_heca_module_state()->hcm;
+        struct heca_transport_manager *htm = get_heca_module_state()->htm;
         struct rb_root *root;
         struct rb_node *node, *next;
         struct heca_connection *conn;
         unsigned long seq;
 
         do {
-                seq = read_seqbegin(&hcm->connections_lock);
-                root = &hcm->connections_rb_tree_root;
+                seq = read_seqbegin(&htm->connections_lock);
+                root = &htm->connections_rb_tree_root;
                 for (node = rb_first(root); node; node = next) {
                         conn = rb_entry(node, struct heca_connection, rb_node);
                         next = rb_next(node);
                         if (atomic_cmpxchg(&conn->alive, -1, 0) == -1)
                                 destroy_connection(conn);
                 }
-        } while (read_seqretry(&hcm->connections_lock, seq));
+        } while (read_seqretry(&htm->connections_lock, seq));
 
         kfree(work);
 }
@@ -665,12 +667,12 @@ static int exchange_info(struct heca_connection *conn, int id)
 
                 conn->remote_node_ip = (u32) conn->rid.remote_info->node_ip;
                 conn->remote.sin_addr.s_addr = (u32) conn->rid.remote_info->node_ip;
-                conn->local = get_heca_module_state()->hcm->sin;
+                conn->local = get_heca_module_state()->htm->sin;
                 conn_found = search_rb_conn(conn->remote_node_ip);
 
                 if (conn_found) {
                         if (conn->remote_node_ip !=
-                                        get_heca_module_state()->hcm->node_ip) {
+                                        get_heca_module_state()->htm->node_ip) {
                                 char curr[20], prev[20];
 
                                 inet_ntoa(conn->remote_node_ip,
@@ -1223,7 +1225,7 @@ err_buf:
 
 static void format_rdma_info(struct heca_connection *conn)
 {
-        conn->rid.send_buf->node_ip = htonl(conn->hcm->node_ip);
+        conn->rid.send_buf->node_ip = htonl(conn->htm->node_ip);
         conn->rid.send_buf->buf_rx_addr = htonll((u64) conn->rx_buffer.rx_buf);
         conn->rid.send_buf->buf_msg_addr = htonll((u64) conn->tx_buffer.tx_buf);
         conn->rid.send_buf->rx_buf_size = htonl(conn->rx_buffer.len);
@@ -1469,7 +1471,7 @@ int server_event_handler(struct rdma_cm_id *id, struct rdma_cm_event *ev)
 {
         int ret = 0;
         struct heca_connection *conn = 0;
-        struct heca_connections_manager *hcm;
+        struct heca_transport_manager *htm;
 
         switch (ev->event) {
         case RDMA_CM_EVENT_ADDR_RESOLVED:
@@ -1481,8 +1483,8 @@ int server_event_handler(struct rdma_cm_id *id, struct rdma_cm_event *ev)
                         goto out;
 
                 init_completion(&conn->completion);
-                hcm = id->context;
-                conn->hcm = hcm;
+                htm = id->context;
+                conn->htm = htm;
                 conn->cm_id = id;
                 id->context = conn;
 
@@ -1599,7 +1601,7 @@ void try_release_tx_element(struct heca_connection *conn,
                 release_tx_element(conn, tx_e);
 }
 
-static int create_connection(struct heca_connections_manager *hcm,
+static int create_connection(struct heca_transport_manager *htm,
                 unsigned long ip,
                 unsigned short port)
 {
@@ -1616,7 +1618,7 @@ static int create_connection(struct heca_connections_manager *hcm,
         param.retry_count = 10;
 
         conn->local.sin_family = AF_INET;
-        conn->local.sin_addr.s_addr = hcm->sin.sin_addr.s_addr;
+        conn->local.sin_addr.s_addr = htm->sin.sin_addr.s_addr;
         conn->local.sin_port = 0;
 
         conn->remote.sin_family = AF_INET;
@@ -1627,7 +1629,7 @@ static int create_connection(struct heca_connections_manager *hcm,
         conn->remote_node_ip = ip;
         insert_rb_conn(conn);
 
-        conn->hcm = hcm;
+        conn->htm = htm;
         conn->cm_id = rdma_create_id(client_event_handler, conn, RDMA_PS_TCP,
                         IB_QPT_RC);
         if (IS_ERR(conn->cm_id))
@@ -1674,7 +1676,7 @@ int connect_hproc(__u32 hspace_id, __u32 hproc_id, unsigned long ip_addr,
                 goto done;
         }
 
-        r = create_connection(heca_state->hcm, ip_addr, port);
+        r = create_connection(heca_state->htm, ip_addr, port);
         if (r) {
                 heca_printk(KERN_ERR "create_connection failed %d", r);
                 goto failed;

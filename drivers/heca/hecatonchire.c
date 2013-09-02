@@ -15,6 +15,7 @@
 #include "base.h"
 #include "push.h"
 #include "task.h"
+#include "transport.h"
 
 #define HECA_MODULE_VERSION     "0.2.0"
 #define HECA_MODULE_AUTHOR      "Benoit Hudzia"
@@ -120,7 +121,7 @@ static void teardown_hspaces(void)
 static void destroy_heca_module_state(void)
 {
         teardown_hspaces();
-        destroy_hcm_listener(heca_state);
+        destroy_htm_listener(heca_state);
         kobject_del(&heca_state->root_kobj);
         kobject_put(&heca_state->root_kobj);
 }
@@ -138,7 +139,7 @@ struct hms_attr {
 static void kobj_hms_release(struct kobject *k)
 {
         BUG_ON(heca_hook_unregister());
-        fini_hcm();
+        fini_htm();
         misc_deregister(&heca_misc);
         heca_zero_pfn_exit();
         mutex_destroy(&heca_state->heca_state_mutex);
@@ -208,7 +209,7 @@ static int heca_init(void)
         BUG_ON(!heca_state);
         heca_zero_pfn_init();
         rc = misc_register(&heca_misc);
-        init_hcm();
+        init_htm();
         BUG_ON(heca_hook_register(&my_heca_hook));
 
         return rc;

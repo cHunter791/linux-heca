@@ -5,10 +5,10 @@
 #include <linux/errno.h>
 #include <linux/pagemap.h>
 
+#include "transport.h"
 #include "hecatonchire.h"
 #include "hproc.h"
 #include "hutils.h"
-
 
 #include "base.h"
 #include "task.h"
@@ -561,8 +561,8 @@ static void remove_hproc(struct heca_process *hproc){
                 struct rb_root *root;
                 struct rb_node *node;
 
-                if (heca_state->hcm) {
-                        root = &heca_state->hcm->connections_rb_tree_root;
+                if (heca_state->htm) {
+                        root = &heca_state->htm->connections_rb_tree_root;
                         for (node = rb_first(root);
                                         node; node = rb_next(node)) {
                                 struct heca_connection *conn;

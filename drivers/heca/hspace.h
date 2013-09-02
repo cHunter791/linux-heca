@@ -12,8 +12,6 @@
 #include <linux/radix-tree.h>
 #include <linux/kobject.h>
 
-
-
 struct heca_space {
         u32 hspace_id;
 

@@ -10,7 +10,7 @@
 #include "hecatonchire.h"
 #include "hutils.h"
 #include "hproc.h"
-
+#include "transport.h"
 #include "base.h"
 
 
@@ -122,7 +122,7 @@ int deregister_hspace(__u32 hspace_id)
                         teardown_hspace(hspace);
         }
 
-        destroy_hcm_listener(heca_state);
+        destroy_htm_listener(heca_state);
         return ret;
 }
 
@@ -131,7 +131,8 @@ int register_hspace(struct hecaioc_hspace *hspace_info)
         struct heca_module_state *heca_state = get_heca_module_state();
         int rc;
 
-        rc = create_hcm_listener(heca_state, hspace_info->local.sin_addr.s_addr,
+        heca_printk(KERN_INFO "creating htm listener");
+        rc = create_htm_listener(heca_state, hspace_info->local.sin_addr.s_addr,
                         hspace_info->local.sin_port);
         if (rc)
                 return rc;
@@ -139,7 +140,7 @@ int register_hspace(struct hecaioc_hspace *hspace_info)
         rc = create_hspace(hspace_info->hspace_id);
         if (rc) {
                 heca_printk(KERN_ERR "create_hspace %d failed", rc);
-                /* FIXME: add the hcm release here*/
+                /* FIXME: add the htm release here*/
         }
 
         return rc;

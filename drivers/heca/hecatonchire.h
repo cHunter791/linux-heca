@@ -14,9 +14,10 @@
 #include <linux/kobject.h>
 
 #include "struct.h"
+#include "transport.h"
 
 struct heca_module_state {
-        struct heca_connections_manager *hcm;
+        struct heca_transport_manager *htm;
         struct mutex heca_state_mutex;
         spinlock_t radix_lock;
         struct radix_tree_root hspaces_tree_root;
