@@ -13,6 +13,7 @@
 #include "push.h"
 #include "base.h"
 
+/*FIXME: move the descritor variable within the heca module state*/
 /* hproc_descriptors */
 static struct heca_process_list *shsc;
 static u32 shsc_max;
@@ -341,6 +342,7 @@ out:
 }
 
 
+/* FIXME use krefs rathern than custom refcount*/
 struct heca_page_cache *heca_cache_get_hold(struct heca_process *hproc,
                 unsigned long addr)
 {

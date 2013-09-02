@@ -22,11 +22,10 @@ static int get_task_struct_by_pid(pid_t pid, struct task_struct **tsk)
         int ret = 0;
         const struct cred *cred = current_cred(), *tcred;
 
-        heca_printk(KERN_DEBUG "<enter>");
 
         rcu_read_lock();
         *tsk = find_task_by_pid_ns(pid, task_active_pid_ns(current));
-        if (!*tsk) {
+        if (!*tsk){
                 heca_printk(KERN_ERR "can't find pid %d", pid);
                 ret = -ESRCH;
                 goto done;
@@ -43,7 +42,6 @@ static int get_task_struct_by_pid(pid_t pid, struct task_struct **tsk)
         get_task_struct(*tsk);
 done:
         rcu_read_unlock();
-        heca_printk(KERN_DEBUG "<exit> %d", ret);
         return ret;
 }
 
@@ -71,21 +69,19 @@ int heca_detach_task(struct task_struct *tsk)
         struct heca_space *hspace, *tmp_hspace;
         struct heca_process *hproc, *tmp_hproc;
 
+        heca_printk(KERN_INFO "Heca Task detached, cleaning up ");
         list_for_each_entry_safe (hspace, tmp_hspace,
                         &get_heca_module_state()->hspaces_list, hspace_ptr) {
                 local_left=0;
                 list_for_each_entry_safe (hproc, tmp_hproc,
                                 &hspace->hprocs_list, hproc_ptr) {
-                        local_left += is_hproc_local(hproc);
                         rcu_read_lock();
                         if (tsk == find_task_by_vpid(hproc->pid)) {
                                 rcu_read_unlock();
-                                heca_printk(KERN_DEBUG "removing HPROC "
-                                                "associated with pid %d",
-                                                hproc->pid);
                                 teardown_hproc(hproc);
                         } else {
                                 rcu_read_unlock();
+                                local_left += is_hproc_local(hproc);
                         }
                 }
                 if(!local_left)

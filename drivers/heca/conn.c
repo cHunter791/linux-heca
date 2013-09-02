@@ -392,8 +392,9 @@ static int heca_recv_message_handler(struct heca_connection *conn,
 {
         struct tx_buffer_element *tx_e = NULL;
 
-        trace_heca_rx_msg(rx_e->hmsg_buffer->hspace_id, rx_e->hmsg_buffer->src_id,
-                        rx_e->hmsg_buffer->dest_id, rx_e->hmsg_buffer->mr_id, 0,
+        trace_heca_rx_msg(rx_e->hmsg_buffer->hspace_id,
+                        rx_e->hmsg_buffer->src_id, rx_e->hmsg_buffer->dest_id,
+                        rx_e->hmsg_buffer->mr_id, 0,
                         rx_e->hmsg_buffer->req_addr, rx_e->hmsg_buffer->type,
                         rx_e->hmsg_buffer->offset);
 
@@ -470,7 +471,8 @@ err:
 static int heca_send_message_handler(struct heca_connection *conn,
                 struct tx_buffer_element *tx_e)
 {
-        trace_heca_tx_msg(tx_e->hmsg_buffer->hspace_id, tx_e->hmsg_buffer->src_id,
+        trace_heca_tx_msg(tx_e->hmsg_buffer->hspace_id,
+                        tx_e->hmsg_buffer->src_id,
                         tx_e->hmsg_buffer->dest_id, -1, 0,
                         tx_e->hmsg_buffer->req_addr, tx_e->hmsg_buffer->type,
                         tx_e->hmsg_buffer->offset);
@@ -515,11 +517,13 @@ static int heca_send_message_handler(struct heca_connection *conn,
         return 0;
 }
 
+/* FIXME handle cq events*/
 static void heca_cq_event_handler(struct ib_event *event, void *data)
 {
         heca_printk(KERN_DEBUG "event %u  data %p", event->event, data);
 }
 
+/*FIXME handle errors */
 void listener_cq_handle(struct ib_cq *cq, void *cq_context)
 {
         struct ib_wc wc;
@@ -589,7 +593,7 @@ static int heca_send_info(struct heca_connection *conn)
         rid->send_wr.num_sge = 1;
         rid->send_wr.opcode = IB_WR_SEND;
         rid->send_wr.send_flags = IB_SEND_SIGNALED;
-        heca_printk(KERN_DEBUG "sending info");
+
         return ib_post_send(conn->cm_id->qp, &rid->send_wr, &rid->send_bad_wr);
 }
 
@@ -1287,7 +1291,7 @@ send_info_err:
         kfree(rid->send_buf);
 
 send_mem_err:
-        heca_printk("no memory allocated for the sending buffer");
+        heca_printk(KERN_ERR "no memory allocated for the sending buffer");
         return -1;
 }
 
@@ -1743,20 +1747,22 @@ struct tx_buffer_element *try_get_next_empty_tx_reply_ele(
 
 static void remove_hprocs_for_conn(struct heca_connection *conn)
 {
-        struct heca_space *hspace;
-        struct heca_process *hproc;
-        struct list_head *pos, *n, *it;
-/* FIXME: check we do all that under the right mutex and we clean up hspace if
- * needed ( last local hproc )
- */
-        list_for_each (pos, &get_heca_module_state()->hspaces_list) {
-                hspace = list_entry(pos, struct heca_space, hspace_ptr);
-                list_for_each_safe (it, n, &hspace->hprocs_list) {
-                        hproc = list_entry(it, struct heca_process,
-                                        hproc_ptr);
+        int local_left;
+        struct heca_space *hspace, *tmp_hspace;
+        struct heca_process *hproc, *tmp_hproc;
+
+        list_for_each_entry_safe (hspace, tmp_hspace,
+                        &get_heca_module_state()->hspaces_list, hspace_ptr) {
+                local_left=0;
+                list_for_each_entry_safe (hproc, tmp_hproc,
+                                &hspace->hprocs_list, hproc_ptr) {
                         if (hproc->connection == conn)
                                 teardown_hproc(hproc);
+                        else
+                                local_left += is_hproc_local(hproc);
                 }
+                if(!local_left)
+                        teardown_hspace(hspace);
         }
 }
 
