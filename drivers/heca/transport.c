@@ -141,20 +141,6 @@ static struct kobj_type ktype_htm = {
         .default_attrs = (struct attribute **) htm_attr,
 };
 
-int create_htm(struct heca_transport_manager *htm)
-{
-        int r = 0;
-
-        struct heca_transport_manager *new_htm = htm;
-        struct heca_module_state *heca_state = get_heca_module_state();
-
-        heca_printk(KERN_INFO "creating hspace");
-        r = kobject_init_and_add(&new_htm->kobj, &ktype_htm,
-                        &heca_state->root_kobj, HTM_KOBJECT);
-
-        return r;
-}
-
 int init_htm(void)
 {
         init_kmem_heca_request_cache();
@@ -245,14 +231,24 @@ int create_htm_listener(struct heca_module_state *heca_state, unsigned long ip,
         heca_state->htm = htm;
 
         ret = rdma_listen(htm->cm_id, 2);
-        if (ret)
+        if (ret){
+                heca_state->htm = NULL;
                 heca_printk(KERN_ERR "Failed rdma_listen: %d", ret);
+                goto failed;
+        }
 
-        create_htm(htm);
-        return 0;
+        ret = kobject_init_and_add(&htm->kobj, &ktype_htm,
+                        &heca_state->root_kobj, HTM_KOBJECT);
+        if(ret)
+                goto kobj_err;
+
+        return ret;
 
 failed:
-        teardown_htm(htm);
+        kfree(htm);
+        return ret;
+kobj_err:
+        kobject_put(&htm->kobj);
         return ret;
 }
 
