@@ -29,8 +29,12 @@ struct heca_hook_struct {
     pushback_page_cb pushback_page;
     is_congested_cb is_congested;
     write_fault_cb write_fault;
-    detach_task_cb detach_task;
-    attach_task_cb attach_task;
+/*
+ * Remove the attach / detach code
+ * detach_task_cb detach_task;
+ * attach_task_cb attach_task;
+ *
+ */
 };
 
 const struct heca_hook_struct *heca_hook_read(void);

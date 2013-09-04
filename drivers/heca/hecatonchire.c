@@ -83,8 +83,9 @@ const struct heca_hook_struct my_heca_hook = {
         .pushback_page = push_back_if_remote_heca_page,
         .is_congested = heca_is_congested,
         .write_fault = heca_write_fault,
-        .attach_task = heca_attach_task,
-        .detach_task = heca_detach_task,
+ /*       .attach_task = heca_attach_task,
+  *       .detach_task = heca_detach_task,
+  */
 };
 inline struct heca_module_state *get_heca_module_state(void)
 {
