@@ -1,6 +1,7 @@
 #include <linux/export.h>
-#include <linux/spinlock.h>
+#include <linux/mutex.h>
 #include <linux/heca_hook.h>
+#include <linux/kref.h>
 
 #if defined(CONFIG_HECA) || defined(CONFIG_HECA_MODULE)
 
@@ -73,103 +74,80 @@ EXPORT_SYMBOL(find_task_by_pid_ns);
 #include "internal.h"
 EXPORT_SYMBOL(munlock_vma_page);
 
-static const struct heca_hook_struct *heca_hook;
-static atomic_t refcount = ATOMIC_INIT(0);
+static const struct heca_hook_struct *hooks = NULL;
+static struct kref hooks_kref;
+DEFINE_MUTEX(hooks_mutex);
 
-const struct heca_hook_struct *heca_hook_read(void)
+
+
+static void heca_hooks_release(struct kref *kref)
 {
-        const struct heca_hook_struct *hook = NULL;
-        unsigned long found;
+        mutex_lock(&hooks_mutex);
+        hooks = NULL;
+        mutex_unlock(&hooks_mutex);
+}
 
-        /* don't toy with refcount if unregister initiated */
+
+const struct heca_hook_struct *heca_hooks_get(void)
+{
         smp_mb();
-        if (!heca_hook)
+        if (!hooks)
                 return NULL;
-
-retry:
-        found = atomic_read(&refcount);
-        if (found > 0) {
-                if (atomic_cmpxchg(&refcount, found, found+1) != found)
-                        goto retry;
-
-                /*
-                 * again, back away if unregister initiated. smp_mb implied in
-                 * atomic_cmpxchg.
-                 */
-                hook = heca_hook;
-                if (unlikely(!hook))
-                        atomic_dec(&refcount);
-        }
-
-        return hook;
+        if (kref_get_unless_zero(&hooks_kref))
+                return hooks;
+        return NULL;
 }
-EXPORT_SYMBOL(heca_hook_read);
+EXPORT_SYMBOL(heca_hooks_get);
 
-void heca_hook_release(const struct heca_hook_struct *hook)
+int heca_hooks_put(void)
 {
-        if (hook)
-                atomic_dec(&refcount);
+        return kref_put(&hooks_kref, heca_hooks_release);
 }
-EXPORT_SYMBOL(heca_hook_release);
+EXPORT_SYMBOL(heca_hooks_put);
 
 int heca_hook_register(const struct heca_hook_struct *hook)
 {
-        if (!atomic_cmpxchg(&refcount, 0, -1)) {
-                heca_hook = hook;
-                atomic_add(2, &refcount);
-                return 0;
+        int r = 0;
+        mutex_lock(&hooks_mutex);
+        if(hooks){
+                r = -EEXIST;
+                goto exit;
         }
-
-        return -EFAULT;
+        hooks = hook;
+        kref_init(&hooks_kref);
+exit:
+        mutex_unlock(&hooks_mutex);
+        return r;
 }
 EXPORT_SYMBOL(heca_hook_register);
 
 int heca_hook_unregister(void)
 {
-        int ret = 0;
-
-        heca_hook = NULL;
-        might_sleep();
-
-        /* block until we release the hook */
-        for (;;) {
-                int found = atomic_cmpxchg(&refcount, 1, 0);
-
-                switch (found) {
-                case 1:
-                        heca_hook = NULL;
-                        goto out;
-                case 0:
-                        ret = -EFAULT;
-                        goto out;
-                default:
-                        cond_resched();
-                }
-        }
-
-out:
-        return ret;
+        return kref_put(&hooks_kref, heca_hooks_release);
 }
 EXPORT_SYMBOL(heca_hook_unregister);
 
-
 #else
-const struct heca_hook_struct *heca_hook_read(void)
+const struct heca_hook_struct *heca_hooks_get(void)
 {
-    return NULL;
+        return NULL;
 }
 
-void heca_hook_release(void)
+int heca_hooks_put(void)
 {
+        return 0;
 }
 
 int heca_hook_register(const struct heca_hook_struct *hook)
 {
+        return 0;
 }
 
 int heca_hook_unregister(void)
 {
+        return 0;
 }
+
 #endif
 
 

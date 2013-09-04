@@ -876,14 +876,14 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 				goto keep_locked;
 #if defined(CONFIG_HECA) || defined(CONFIG_HECA_MODULE)
             {
-                const struct heca_hook_struct *hook = heca_hook_read();
+                const struct heca_hook_struct *hook = heca_hooks_get();
 
                 if (hook && hook->pushback_page(page)) {
                     nr_dirty++;
-                    heca_hook_release(hook);
+                    heca_hooks_put();
                     goto keep;
                 }
-                heca_hook_release(hook);
+                heca_hooks_put();
             }
 #endif
 

@@ -1717,7 +1717,7 @@ long __get_user_pages(struct task_struct *tsk, struct mm_struct *mm,
 
 	VM_BUG_ON(!!pages != !!(gup_flags & FOLL_GET));
 
-	/* 
+	/*
 	 * Require read or write permissions.
 	 * If FOLL_FORCE is set, we only require the "MAY" flags.
 	 */
@@ -3026,7 +3026,7 @@ static int do_swap_page(struct mm_struct *mm, struct vm_area_struct *vma,
         }
 #if defined(CONFIG_HECA) || defined(CONFIG_HECA_MODULE)
         else if (is_heca_entry(entry)) {
-            const struct heca_hook_struct *hook = heca_hook_read();
+            const struct heca_hook_struct *hook = heca_hooks_get();
 
             if (hook) {
                 ret = hook->fetch_page(mm, vma, address,
@@ -3035,7 +3035,7 @@ static int do_swap_page(struct mm_struct *mm, struct vm_area_struct *vma,
                 print_bad_pte(vma, address, orig_pte, NULL);
                 ret = VM_FAULT_SIGBUS;
             }
-            heca_hook_release(hook);
+            heca_hooks_put();
             goto out;
 		}
 #endif
@@ -3761,7 +3761,7 @@ int handle_pte_fault(struct mm_struct *mm,
 		if (!pte_write(entry)) {
 #if defined(CONFIG_HECA) || defined(CONFIG_HECA_MODULE)
 			{
-				const struct heca_hook_struct *hook = heca_hook_read();
+				const struct heca_hook_struct *hook = heca_hooks_get();
 
 				if (hook) {
 					int r = hook->write_fault(mm, vma, address, pmd, pte, ptl,
