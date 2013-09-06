@@ -645,7 +645,7 @@ void  teardown_hproc(struct heca_process *hproc){
 
 }
 
-void teardown_hproc_byid(u32 hspace_id, u32 hproc_id)
+void teardown_hproc_by_id(u32 hspace_id, u32 hproc_id)
 {
         struct heca_module_state *heca_state = get_heca_module_state();
         struct heca_space *hspace;

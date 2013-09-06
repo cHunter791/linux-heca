@@ -7,6 +7,26 @@
 #include "ioctl.h"
 #include "task.h"
 #include "base.h"
+/*
+ *  kernel/exit.c CODE removed ( line 814) note the code is broken and need to
+ *  be fixed first .... ( break without releasing th hook ?? + other stuff... )
+ *
+#if defined(CONFIG_HECA) || defined(CONFIG_HECA_MODULE)
+do {
+const struct heca_hook_struct *heca =
+heca_hook_read();
+if (!heca || !heca->detach_task)
+break;
+heca->detach_task(tsk);
+heca_hook_release(heca);
+} while (0);
+#endif
+
+ *
+ *
+ *
+ */
+
 
 pid_t get_current_pid(void)
 {
@@ -63,6 +83,7 @@ int heca_attach_task(struct task_struct *tsk)
         return 0;
 }
 
+/* relese doesn't work we need to fix the hspace release*/
 int heca_detach_task(struct task_struct *tsk)
 {
         int ret = 0, local_left;

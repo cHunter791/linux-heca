@@ -12,6 +12,7 @@
 #include "transport.h"
 #include "hutils.h"
 #include "hspace.h"
+#include "hproc.h"
 #include "ioctl.h"
 
 #include "base.h"
@@ -54,7 +55,60 @@ MODULE_PARM_DESC(debug, "Debug level (0 = disable)");
 #endif
 
 
+#define SUCCESS 0
+#define FAIL    -1
+
 static struct heca_module_state *heca_state;
+
+static int heca_close(struct inode *inode, struct file *file)
+{
+        struct process_priv_data *priv;
+        priv  = (struct process_priv_data *) file->private_data;
+        if(priv){
+                if(priv->hspace_id != 0 ){
+                        if(priv->hproc_id != 0)
+                                teardown_hproc_by_id(priv->hspace_id,
+                                                priv->hproc_id);
+                        else{
+                                struct heca_process *hproc, *tmp_hproc;
+                                int local_left=0;
+                                struct heca_space *hspace = find_hspace(
+                                                priv->hspace_id);
+                                if(!hspace)
+                                        goto free_priv;
+                                list_for_each_entry_safe (hproc, tmp_hproc,
+                                                &hspace->hprocs_list,
+                                                hproc_ptr) {
+                                        local_left += is_hproc_local(hproc);
+                                }
+                                if(!local_left)
+                                        teardown_hspace(hspace);
+                        }
+
+                }
+free_priv:
+                kfree(priv);
+        }
+        kobject_put(&heca_state->root_kobj);
+        return SUCCESS;
+}
+
+
+static int heca_open(struct inode *inode, struct file *file)
+{
+        int ret = SUCCESS;
+        struct process_priv_data *priv;
+        kobject_get(&heca_state->root_kobj);
+
+        priv =(void*)kmalloc(sizeof(struct process_priv_data), GFP_KERNEL);
+        if(!priv)
+                ret = -ENOMEM;
+        priv->hspace_id = 0;
+        priv->hproc_id = 0;
+        file->private_data = (void *) priv;
+        return ret;
+}
+
 
 
 /*
@@ -65,6 +119,8 @@ static struct file_operations heca_fops = {
         .owner = THIS_MODULE,
         .unlocked_ioctl = heca_ioctl,
         .llseek = noop_llseek,
+        .open = heca_open,
+        .release = heca_close,
 };
 
 /*
@@ -83,8 +139,9 @@ const struct heca_hook_struct my_heca_hook = {
         .pushback_page = push_back_if_remote_heca_page,
         .is_congested = heca_is_congested,
         .write_fault = heca_write_fault,
-        .attach_task = heca_attach_task,
-        .detach_task = heca_detach_task,
+        /*       .attach_task = heca_attach_task,
+         *       .detach_task = heca_detach_task,
+         */
 };
 inline struct heca_module_state *get_heca_module_state(void)
 {
