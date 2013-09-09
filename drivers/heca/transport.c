@@ -21,6 +21,8 @@
 #define to_htm(s)            container_of(s, struct heca_transport_manager, kobj)
 #define to_htm_attr(sa)      container_of(sa, struct htm_attr, attr)
 
+static int tmp_char;
+
 static int htm_disconnect(struct heca_transport_manager *htm)
 {
         struct rb_root *root = &htm->connections_rb_tree_root;
@@ -127,12 +129,40 @@ static ssize_t heca_transport_manager_show(struct kobject *k,
         return 0;
 }
 
+static ssize_t heca_transport_manager_store(struct kobject *k, struct attribute *a,
+                char *buffer, size_t count)
+{
+        struct heca_transport_manager *htm = to_htm(k);
+        struct htm_attr *htm_attr = to_htm_attr(a);
+        ssize_t ret;
+
+        ret = htm_attr->store ? htm_attr->store(htm, buffer, count) : -EIO;
+
+        return ret;
+}
+static ssize_t tmp_show(struct heca_transport_manager * htm, char *data)
+{
+        return sprintf(data, "%u\n", tmp_char);
+}
+
+static ssize_t tmp_store(struct heca_transport_manager * htm, char *data, size_t
+                size)
+{
+        sscanf(data, "%u", &tmp_char);
+        return size;
+}
+
+INSTANCE_ATTR(struct htm_attr, tmp, S_IWUSR | S_IRUGO, tmp_show, tmp_store);
+
 static struct htm_attr *htm_attr[] = {
+        &ATTR_NAME(tmp),
         NULL
 };
 
+
 static struct sysfs_ops heca_transport_manager_ops = {
         .show = heca_transport_manager_show,
+        .store = heca_transport_manager_store,
 };
 
 static struct kobj_type ktype_htm = {
