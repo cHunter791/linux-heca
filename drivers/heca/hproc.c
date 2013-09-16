@@ -561,7 +561,7 @@ static void remove_hproc(struct heca_process *hproc){
                 struct rb_root *root;
                 struct rb_node *node;
 
-                if (heca_state->htm) {
+                if (find_htm(heca_state)) {
                         root = &heca_state->htm->connections_rb_tree_root;
                         for (node = rb_first(root);
                                         node; node = rb_next(node)) {

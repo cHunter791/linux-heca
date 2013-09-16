@@ -29,11 +29,20 @@ struct heca_transport_manager {
         struct kobject kobj;
 };
 
+struct transport {
+        struct kset *transport_kset;
+};
+
+struct rdma_transport {
+        struct kobject kobj;
+};
+
 void teardown_htm(struct heca_transport_manager *);
 int create_htm(struct heca_transport_manager *);
 int create_htm_listener(struct heca_module_state *, unsigned long,
                 unsigned short);
 int init_htm(void);
 int fini_htm(void);
+int find_htm(struct heca_module_state *);
 int destroy_htm_listener(struct heca_transport_manager *);
 #endif /* _HECA_TRANSPORT_H */

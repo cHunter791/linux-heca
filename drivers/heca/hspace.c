@@ -132,6 +132,14 @@ int register_hspace(struct hecaioc_hspace *hspace_info)
         int rc;
 
         heca_printk(KERN_INFO "creating htm listener");
+        rc = find_htm(heca_state);
+
+        if (!rc) {
+                heca_printk(KERN_ERR "htm listener %p already exists",
+                                heca_state->htm);
+                return rc;
+        }
+
         rc = create_htm_listener(heca_state, hspace_info->local.sin_addr.s_addr,
                         hspace_info->local.sin_port);
         if (rc)

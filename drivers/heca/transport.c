@@ -192,6 +192,10 @@ int fini_htm(void)
         return 0;
 }
 
+int find_htm(struct heca_module_state *heca_state)
+{
+        return !!heca_state->htm;
+}
 
 int create_htm_listener(struct heca_module_state *heca_state, unsigned long ip,
                 unsigned short port)
