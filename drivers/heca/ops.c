@@ -355,7 +355,7 @@ int process_hproc_status(struct heca_connection *conn,
 {
         heca_printk(KERN_DEBUG "removing hproc %d",
                         rx_buf_e->hmsg_buffer->src_id);
-        teardown_hproc_byid(rx_buf_e->hmsg_buffer->hspace_id,
+        teardown_hproc_by_id(rx_buf_e->hmsg_buffer->hspace_id,
                         rx_buf_e->hmsg_buffer->src_id);
         return 1;
 }

@@ -115,7 +115,9 @@ int deregister_hspace(__u32 hspace_id)
         int ret = 0;
         struct heca_space *hspace;
         struct list_head *curr, *next;
-
+        /*fIXME: why do weneed to scan through the list.. we should have a
+         * single HSPACE !
+         */
         list_for_each_safe (curr, next, &heca_state->hspaces_list) {
                 hspace = list_entry(curr, struct heca_space, hspace_ptr);
                 if (hspace->hspace_id == hspace_id)
@@ -154,6 +156,7 @@ int register_hspace(struct hecaioc_hspace *hspace_info)
         return rc;
 }
 
+/* FIXME : maybe create a find_get as well for refcount ...*/
 struct heca_space *find_hspace(u32 id)
 {
         struct heca_module_state *heca_state = get_heca_module_state();

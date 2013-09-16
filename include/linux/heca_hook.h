@@ -29,13 +29,17 @@ struct heca_hook_struct {
     pushback_page_cb pushback_page;
     is_congested_cb is_congested;
     write_fault_cb write_fault;
-    detach_task_cb detach_task;
-    attach_task_cb attach_task;
+/*
+ * Remove the attach / detach code
+ * detach_task_cb detach_task;
+ * attach_task_cb attach_task;
+ *
+ */
 };
 
-const struct heca_hook_struct *heca_hook_read(void);
-void heca_hook_release(const struct heca_hook_struct *hook);
-int heca_hook_register(const struct heca_hook_struct *hook);
+const struct heca_hook_struct *heca_hooks_get(void);
+int heca_hooks_put(void);
+int heca_hook_register(const struct heca_hook_struct *);
 int heca_hook_unregister(void);
 #endif /* HECA_HOOK_H_ */
 

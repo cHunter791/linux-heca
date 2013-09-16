@@ -13,7 +13,10 @@
 #include <linux/radix-tree.h>
 #include <linux/kobject.h>
 
+/* struct placeholder to avoid loading the .h */
 struct heca_transport_manager;
+struct heca_space;
+struct heca_process;
 
 struct heca_module_state {
         struct heca_transport_manager *htm;
@@ -28,6 +31,12 @@ struct heca_module_state {
 
         struct kobject root_kobj;
         struct kset *hspaces_kset;
+};
+
+/* used to track the info associated with the file descriptor */
+struct process_priv_data {
+        u32 hspace_id;
+        u32 hproc_id;
 };
 
 inline struct heca_module_state *get_heca_module_state(void);
