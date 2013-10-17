@@ -59,6 +59,7 @@ struct hecaioc_ps {
 #define HECAIOC_HPROC_RM             _IOW(HECAIOC, 0xB1, struct hecaioc_hproc)
 
 #define HECAIOC_HMR_ADD              _IOW(HECAIOC, 0xC0, struct hecaioc_hmr)
+#define HECAIOC_HMR_RM               _IOW(HECAIOC, 0xC1, struct hecaioc_hmr)
 
 #define HECAIOC_PS_PUSHBACK          _IOW(HECAIOC, 0xD0, struct hecaioc_ps)
 #define HECAIOC_PS_UNMAP             _IOW(HECAIOC, 0xD1, struct hecaioc_ps)
