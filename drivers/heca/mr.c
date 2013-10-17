@@ -34,7 +34,7 @@ static void kobj_hmr_release(struct kobject *k)
         struct heca_memory_region *hmr = to_hmr(k);
 
         heca_printk(KERN_INFO "Releasing MR : %p from addr 0x%lx,  mr_id: %u",
-		 hmr, hmr->addr, hmr->hmr_id);
+            hmr, hmr->addr, hmr->hmr_id);
         synchronize_rcu();
         kfree(hmr);
 }
@@ -314,7 +314,7 @@ int destroy_hmr_by_id(struct hecaioc_hmr *udata)
         local_hproc = find_local_hproc_from_list(hspace);
         if (!local_hproc) {
                 heca_printk(KERN_ERR "can't find local hproc for hspace %d",
-                                udata->hspace_id);
+                    udata->hspace_id);
                 ret = -EFAULT;
                 goto out;
         }
@@ -326,7 +326,7 @@ int destroy_hmr_by_id(struct hecaioc_hmr *udata)
                 goto out;
         }
 
-	remove_hmr_from_hproc_trees(local_hproc, hmr);
+        remove_hmr_from_hproc_trees(local_hproc, hmr);
         teardown_heca_memory_region(hmr);
 
 out:

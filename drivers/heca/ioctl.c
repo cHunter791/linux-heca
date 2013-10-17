@@ -61,7 +61,7 @@ static int ioctl_mr(int ioctl, void __user *argp)
                 destroy_hmr_by_id(&udata);
                 return 0;
         }
-        
+
         return -EINVAL;
 }
 
