@@ -5,6 +5,7 @@
 #include <linux/spinlock.h>
 #include <linux/rcupdate.h>
 #include <linux/errno.h>
+#include <linux/list.h>
 #include <rdma/rdma_cm.h>
 #include <rdma/ib_verbs.h>
 
@@ -15,6 +16,7 @@
 #include "ops.h"
 #include "ioctl.h"
 #include "pull.h"
+#include "rdma_transport.h"
 
 #define HTM_KOBJECT          "transport_manager"
 
@@ -28,7 +30,6 @@ static int htm_disconnect(struct heca_transport_manager *htm)
         struct rb_root *root = &htm->connections_rb_tree_root;
         struct rb_node *node = rb_first(root);
         struct heca_connection *conn;
-
         while (node) {
                 conn = rb_entry(node, struct heca_connection, rb_node);
                 node = rb_next(node);
@@ -40,7 +41,6 @@ static int htm_disconnect(struct heca_transport_manager *htm)
 
         while (rb_first(root))
                 ;
-
         return 0;
 }
 
@@ -48,6 +48,7 @@ int destroy_htm_listener(struct heca_transport_manager *htm)
 {
         int rc = 0;
         struct heca_module_state *heca_state = get_heca_module_state();
+	struct transport *rtransport, *next;
 
         heca_printk(KERN_DEBUG "<enter>");
 
@@ -59,35 +60,17 @@ int destroy_htm_listener(struct heca_transport_manager *htm)
                 rc = -EBUSY;
         }
 
+	list_for_each_entry_safe(rtransport, next, &htm->transport_head,
+                        transport_list) {
+                list_del(&rtransport->transport_list);
+		rc = destroy_rdma((struct rdma_transport*)rtransport->context);
+                rtransport->context = NULL;
+                if (list_empty(&htm->transport_head)) {
+                        heca_printk(KERN_INFO "list empty");
+                }
+	}
+
         htm_disconnect(htm);
-
-        if (!htm->cm_id)
-                goto destroy;
-
-        if (htm->cm_id->qp) {
-                ib_destroy_qp(htm->cm_id->qp);
-                htm->cm_id->qp = NULL;
-        }
-
-        if (htm->listen_cq) {
-                ib_destroy_cq(htm->listen_cq);
-                htm->listen_cq = NULL;
-        }
-
-        if (htm->mr) {
-                ib_dereg_mr(htm->mr);
-                htm->mr = NULL;
-        }
-
-        if (htm->pd) {
-                ib_dealloc_pd(htm->pd);
-                htm->pd = NULL;
-        }
-
-        rdma_destroy_id(htm->cm_id);
-        htm->cm_id = NULL;
-
-destroy:
         mutex_destroy(&htm->htm_mutex);
         kfree(htm);
         heca_state->htm = NULL;
@@ -99,8 +82,7 @@ done:
 
 void teardown_htm(struct heca_transport_manager *htm)
 {
-        heca_printk(KERN_INFO "tearing down htm %p htm id: %p", htm,
-                        htm->cm_id);
+        heca_printk(KERN_INFO "tearing down htm %p", htm);
         /* we remove sysfs entry */
         kobject_del(&htm->kobj);
         /* move refcount to zero and free it */
@@ -129,8 +111,8 @@ static ssize_t heca_transport_manager_show(struct kobject *k,
         return 0;
 }
 
-static ssize_t heca_transport_manager_store(struct kobject *k, struct attribute *a,
-                char *buffer, size_t count)
+static ssize_t heca_transport_manager_store(struct kobject *k,
+                struct attribute *a, char *buffer, size_t count)
 {
         struct heca_transport_manager *htm = to_htm(k);
         struct htm_attr *htm_attr = to_htm_attr(a);
@@ -203,88 +185,33 @@ int create_htm_listener(struct heca_module_state *heca_state, unsigned long ip,
         int ret = 0;
         struct heca_transport_manager *htm = kzalloc(
                         sizeof(struct heca_transport_manager), GFP_KERNEL);
+	struct transport *rtransport = kmalloc(sizeof(struct transport),
+                        GFP_KERNEL);
+
+        INIT_LIST_HEAD(&htm->transport_head);
 
         if (!htm)
                 return -ENOMEM;
 
+        list_add(&rtransport->transport_list, &htm->transport_head);
         mutex_init(&htm->htm_mutex);
         seqlock_init(&htm->connections_lock);
         htm->node_ip = ip;
         htm->connections_rb_tree_root = RB_ROOT;
 
-        htm->cm_id = rdma_create_id(server_event_handler, htm, RDMA_PS_TCP,
-                        IB_QPT_RC);
-        if (IS_ERR(htm->cm_id)) {
-                htm->cm_id = NULL;
-                ret = PTR_ERR(htm->cm_id);
-                heca_printk(KERN_ERR "Failed rdma_create_id: %d", ret);
-                goto failed;
-        }
+        ret = create_rdma(heca_state, htm, rtransport, port);
 
-        htm->sin.sin_family = AF_INET;
-        htm->sin.sin_addr.s_addr = htm->node_ip;
-        htm->sin.sin_port = port;
-
-        ret = rdma_bind_addr(htm->cm_id, (struct sockaddr *)&htm->sin);
-        if (ret) {
-                heca_printk(KERN_ERR "Failed rdma_bind_addr: %d", ret);
-                goto failed;
-        }
-
-        htm->pd = ib_alloc_pd(htm->cm_id->device);
-        if (IS_ERR(htm->pd)) {
-                ret = PTR_ERR(htm->pd);
-                htm->pd = NULL;
-                heca_printk(KERN_ERR "Failed id_alloc_pd: %d", ret);
-                goto failed;
-        }
-
-        htm->listen_cq = ib_create_cq(htm->cm_id->device, listener_cq_handle,
-                        NULL, htm, 2, 0);
-        if (IS_ERR(htm->listen_cq)) {
-                ret = PTR_ERR(htm->listen_cq);
-                htm->listen_cq = NULL;
-                heca_printk(KERN_ERR "Failed ib_create_cq: %d", ret);
-                goto failed;
-        }
-
-        if ((ret = ib_req_notify_cq(htm->listen_cq, IB_CQ_NEXT_COMP))) {
-                heca_printk(KERN_ERR "Failed ib_req_notify_cq: %d", ret);
-                goto failed;
-        }
-
-        htm->mr = ib_get_dma_mr(htm->pd, IB_ACCESS_LOCAL_WRITE |
-                        IB_ACCESS_REMOTE_READ | IB_ACCESS_REMOTE_WRITE);
-        if (IS_ERR(htm->mr)) {
-                ret = PTR_ERR(htm->mr);
-                htm->mr = NULL;
-                heca_printk(KERN_ERR "Failed ib_get_dma_mr: %d", ret);
-                goto failed;
-        }
-
-        heca_state->htm = htm;
-
-        ret = rdma_listen(htm->cm_id, 2);
-        if (ret){
-                heca_state->htm = NULL;
-                heca_printk(KERN_ERR "Failed rdma_listen: %d", ret);
-                goto failed;
-        }
+        if(ret)
+                return ret;
 
         ret = kobject_init_and_add(&htm->kobj, &ktype_htm,
                         &heca_state->root_kobj, HTM_KOBJECT);
+
         if(ret)
                 goto kobj_err;
 
-        return ret;
-
-failed:
-        kfree(htm);
         return ret;
 kobj_err:
         kobject_put(&htm->kobj);
         return ret;
 }
-
-
-

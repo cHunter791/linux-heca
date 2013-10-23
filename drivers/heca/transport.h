@@ -6,35 +6,30 @@
 #include <linux/seqlock.h>
 #include <linux/in.h>
 #include <linux/kobject.h>
+#include <linux/list.h>
 
 struct heca_module_state;
 
 struct heca_transport_manager {
         int node_ip;
 
-        struct rdma_cm_id *cm_id;
-        struct ib_device *dev;
-        struct ib_pd *pd;
-        struct ib_mr *mr;
-
-        struct ib_cq *listen_cq;
-
         struct mutex htm_mutex;
 
         struct rb_root connections_rb_tree_root;
         seqlock_t connections_lock;
 
-        struct sockaddr_in sin;
+	struct list_head transport_head;
 
         struct kobject kobj;
 };
 
 struct transport {
-        struct kset *transport_kset;
-};
+        int type;
+	void* context;
 
-struct rdma_transport {
-        struct kobject kobj;
+	struct list_head transport_list;
+
+	struct kset *transport_kset;
 };
 
 void teardown_htm(struct heca_transport_manager *);

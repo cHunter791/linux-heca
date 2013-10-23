@@ -133,10 +133,9 @@ int register_hspace(struct hecaioc_hspace *hspace_info)
         struct heca_module_state *heca_state = get_heca_module_state();
         int rc;
 
-        heca_printk(KERN_INFO "creating htm listener");
         rc = find_htm(heca_state);
 
-        if (!rc) {
+        if (rc) {
                 heca_printk(KERN_ERR "htm listener %p already exists",
                                 heca_state->htm);
                 return rc;
@@ -146,8 +145,8 @@ int register_hspace(struct hecaioc_hspace *hspace_info)
                         hspace_info->local.sin_port);
         if (rc)
                 return rc;
-
         rc = create_hspace(hspace_info->hspace_id);
+
         if (rc) {
                 heca_printk(KERN_ERR "create_hspace %d failed", rc);
                 /* FIXME: add the htm release here*/

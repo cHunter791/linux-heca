@@ -57,6 +57,9 @@ static int ioctl_mr(int ioctl, void __user *argp)
         switch (ioctl) {
         case HECAIOC_HMR_ADD:
                 return create_heca_mr(&udata);
+        case HECAIOC_HMR_RM:
+                destroy_hmr_by_id(&udata);
+                return 0;
         }
 
         return -EINVAL;
@@ -129,6 +132,7 @@ long heca_ioctl(struct file *f, unsigned int ioctl, unsigned long arg)
                 r = ioctl_hproc(ioctl, argp);
                 goto out;
         case HECAIOC_HMR_ADD:
+        case HECAIOC_HMR_RM:
                 r = ioctl_mr(ioctl, argp);
                 goto out;
         case HECAIOC_PS_PUSHBACK:

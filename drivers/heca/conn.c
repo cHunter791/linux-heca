@@ -17,6 +17,7 @@
 #include "ops.h"
 #include "transport.h"
 #include "hecatonchire.h"
+#include "rdma_transport.h"
 
 #define ntohll(x) be64_to_cpu(x)
 #define htonll(x) cpu_to_be64(x)
@@ -540,8 +541,8 @@ void listener_cq_handle(struct ib_cq *cq, void *cq_context)
                         case IB_WC_RECV:
                                 break;
                         default: {
-                                heca_printk(KERN_ERR "expected opcode %d got %d",
-                                                IB_WC_SEND, wc.opcode);
+                                heca_printk(KERN_ERR "expected opcode %d got %d"
+                                                ,IB_WC_SEND, wc.opcode);
                                 break;
                         }
                         }
@@ -631,11 +632,25 @@ static int setup_recv_wr(struct heca_connection *conn)
         return 0;
 }
 
-static int exchange_info(struct heca_connection *conn, int id)
+static int exchange_info(struct heca_connection *conn, int id, int type)
 {
         int flag = (int) conn->rid.remote_info->flag;
         int ret = 0;
         struct heca_connection * conn_found;
+	struct transport *rtransport;
+	struct rdma_transport *rt;
+
+        list_for_each_entry(rtransport, &get_heca_module_state()->htm->transport_head, 
+                        transport_list) {
+                if (type == rtransport->type) {
+			rt = (struct rdma_transport*)rtransport->context;
+                        heca_printk(KERN_INFO "%p", &rt);
+                        break;
+                }
+	}
+
+        if(!rt)
+                goto err;
 
         BUG_ON(!conn);
 
@@ -667,7 +682,7 @@ static int exchange_info(struct heca_connection *conn, int id)
 
                 conn->remote_node_ip = (u32) conn->rid.remote_info->node_ip;
                 conn->remote.sin_addr.s_addr = (u32) conn->rid.remote_info->node_ip;
-                conn->local = get_heca_module_state()->htm->sin;
+                conn->local = rt->sin;
                 conn_found = search_rb_conn(conn->remote_node_ip);
 
                 if (conn_found) {
@@ -762,7 +777,7 @@ static void conn_recv_poll(struct ib_cq *cq)
                 if (conn->rid.remote_info->flag) {
                         BUG_ON(wc.byte_len != sizeof(struct heca_rdma_info));
                         reg_rem_info(conn);
-                        exchange_info(conn, wc.wr_id);
+                        exchange_info(conn, wc.wr_id, 1);
                 } else {
                         BUG_ON(wc.byte_len != sizeof(struct heca_message));
                         BUG_ON(wc.wr_id < 0 || wc.wr_id >= conn->rx_buffer.len);
@@ -1105,16 +1120,16 @@ static int create_tx_buffer(struct heca_connection *conn)
                         goto err;
                 }
 
-                tx_buff_e[i].wrk_req = kzalloc(sizeof(struct heca_msg_work_request),
-                                GFP_KERNEL);
+                tx_buff_e[i].wrk_req = kzalloc(sizeof(struct
+                                        heca_msg_work_request), GFP_KERNEL);
                 if (!tx_buff_e[i].wrk_req) {
                         heca_printk(KERN_ERR "Failed to allocate wrk_req");
                         ret = -ENOMEM;
                         goto err;
                 }
 
-                tx_buff_e[i].wrk_req->wr_ele = kzalloc(sizeof(struct heca_work_request_element),
-                                GFP_KERNEL);
+                tx_buff_e[i].wrk_req->wr_ele = kzalloc(sizeof(struct
+                                        heca_work_request_element), GFP_KERNEL);
                 if (!tx_buff_e[i].wrk_req->wr_ele) {
                         heca_printk(KERN_ERR "Failed to allocate wrk_req->wr_ele");
                         ret = -ENOMEM;
@@ -1122,8 +1137,8 @@ static int create_tx_buffer(struct heca_connection *conn)
                 }
                 tx_buff_e[i].wrk_req->wr_ele->heca_dma = tx_buff_e[i].heca_dma;
 
-                tx_buff_e[i].reply_work_req = kzalloc(sizeof(struct heca_reply_work_request),
-                                GFP_KERNEL);
+                tx_buff_e[i].reply_work_req = kzalloc(sizeof(struct
+                                        heca_reply_work_request), GFP_KERNEL);
                 if (!tx_buff_e[i].reply_work_req) {
                         heca_printk(KERN_ERR "Failed to allocate reply_work_req");
                         ret = -ENOMEM;
@@ -1602,11 +1617,24 @@ void try_release_tx_element(struct heca_connection *conn,
 }
 
 static int create_connection(struct heca_transport_manager *htm,
-                unsigned long ip,
-                unsigned short port)
+                unsigned long ip, unsigned short port,
+		int type)
 {
         struct rdma_conn_param param;
         struct heca_connection *conn;
+	struct transport *rtransport;
+	struct rdma_transport *rt;
+
+        list_for_each_entry(rtransport, &htm->transport_head, transport_list) {
+                if (type == rtransport->type) {
+			rt = (struct rdma_transport*)rtransport->context;
+                        heca_printk(KERN_INFO "%p", &rt);
+                        break;
+                }
+	}
+
+        if (!rt)
+                goto err;
 
         conn = vzalloc(sizeof(struct heca_connection));
         if (unlikely(!conn))
@@ -1618,7 +1646,7 @@ static int create_connection(struct heca_transport_manager *htm,
         param.retry_count = 10;
 
         conn->local.sin_family = AF_INET;
-        conn->local.sin_addr.s_addr = htm->sin.sin_addr.s_addr;
+        conn->local.sin_addr.s_addr = rt->sin.sin_addr.s_addr;
         conn->local.sin_port = 0;
 
         conn->remote.sin_family = AF_INET;
@@ -1634,7 +1662,6 @@ static int create_connection(struct heca_transport_manager *htm,
                         IB_QPT_RC);
         if (IS_ERR(conn->cm_id))
                 goto err1;
-
 
         return rdma_resolve_addr(conn->cm_id, (struct sockaddr *) &conn->local,
                         (struct sockaddr*) &conn->remote, 2000);
@@ -1676,7 +1703,7 @@ int connect_hproc(__u32 hspace_id, __u32 hproc_id, unsigned long ip_addr,
                 goto done;
         }
 
-        r = create_connection(heca_state->htm, ip_addr, port);
+        r = create_connection(heca_state->htm, ip_addr, port, 1);
         if (r) {
                 heca_printk(KERN_ERR "create_connection failed %d", r);
                 goto failed;
